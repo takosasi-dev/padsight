@@ -129,7 +129,9 @@ public sealed class ButtonsPage : IDiagPage
             Ui.Horizontal(Ui.Button("数え直す", () => App.Current.PostToInput(e => e.ResetChatter())), _chatterSave, _chatterSaved),
             Ui.Weak("離してから 15 ミリ秒未満で押されたときに数えます。0 回でも壊れていないとは限りません"));
 
-        View = Ui.Page(coverage, _paddleCard, chatter);
+        var page = Ui.Page(coverage, _paddleCard, chatter);
+        page.Padding = new Thickness(0, 0, 12, 4); // 外枠がもう余白を持つので、上は左の一覧とそろえ、右はスクロールバーの分だけ空ける
+        View = page;
         ShowNoPad();
     }
 
@@ -152,19 +154,21 @@ public sealed class ButtonsPage : IDiagPage
         string setup = $"{pad.InstanceId}|{profile.Id}|{threshold.ToString(Inv)}";
         if (setup != _setupKey)
             Setup(setup, profile, threshold);
+        // パドルは描画の時刻で数える(デモの DiagSample は Stopwatch の時刻で、NowNs と基準が違うことがあるため。窓の 100 ミリ秒は描画の間隔の粗さになる)
         foreach (var s in c.Samples)
         {
             _coverage!.Feed(s);
-            _paddles!.Feed(s);
+            _paddles!.Feed(c.NowNs, s.Buttons);
         }
         _paddles!.Tick(c.NowNs);
         Refresh();
     }
 
-    /// <summary>パドルの確認を止める(結果は出さない)。網羅は離れても続きから。</summary>
+    /// <summary>途中のパドルの確認を止める(結果は出さない)。確かめ終えた結果と網羅は、離れても残す。</summary>
     public void Cancel()
     {
-        _paddles?.Reset();
+        if (_paddles?.State.Phase is not (null or PaddlePhase.Idle or PaddlePhase.Done))
+            _paddles!.Reset();
         _paddleKey = "";
         if (_last is not null) Refresh();
     }
@@ -278,14 +282,14 @@ public sealed class ButtonsPage : IDiagPage
 
     void SaveCoverage()
     {
-        if (_coverage is null || _last is not { Pad: { } pad, Profile: { } profile })
+        if (_coverage is null || _last is not { Pad: { } pad, Profile: not null })
             return;
         var st = _coverage.State;
         var notDone = st.Items.Where(i => i.Mark != CoverageMark.Done).Select(i => i.Unregistered ? PadLabel(i.Key, _last) : i.Label).ToList();
         string verdict = st.AllDone
             ? "全部のボタンが反応しました" + (notDone.Count > 0 ? $"(拡張の{string.Join("・", notDone)}は反応していません。機種や接続によって無いことがあります)" : "")
             : $"反応を確かめられなかったボタン: {string.Join("・", notDone)}。押し忘れか、反応していない可能性があります";
-        Save(_coverageSaved, new DiagRecord("buttons", "ボタンの網羅", DateTime.UtcNow, pad.Name, profile.Name,
+        Save(_coverageSaved, new DiagRecord("buttons", "ボタンの網羅", DateTime.UtcNow, pad.Name, pad.Kind.ToString(),
             [new("反応したボタン", st.Done), new("ボタンの数", st.Items.Count), new("残り", st.Remaining)], verdict, [], App.Version));
     }
 
@@ -348,7 +352,7 @@ public sealed class ButtonsPage : IDiagPage
 
     void SavePaddles()
     {
-        if (_paddles is null || _last is not { Pad: { } pad, Profile: { } profile })
+        if (_paddles is null || _last is not { Pad: { } pad, Profile: not null })
             return;
         var st = _paddles.State;
         int responded = st.Mappings.Count(m => m.Arrived.Count > 0);
@@ -356,7 +360,7 @@ public sealed class ButtonsPage : IDiagPage
         string verdict = responded == st.Mappings.Count
             ? list
             : list + "。反応が無いパドルは、不調か、割り当てが無い可能性があります";
-        Save(_paddleSaved, new DiagRecord("paddles", "パドルの確認", DateTime.UtcNow, pad.Name, profile.Name,
+        Save(_paddleSaved, new DiagRecord("paddles", "パドルの確認", DateTime.UtcNow, pad.Name, pad.Kind.ToString(),
             [new("パドルの数", st.Mappings.Count), new("反応したパドル", responded)], verdict, [], App.Version));
     }
 
@@ -454,7 +458,7 @@ public sealed class ButtonsPage : IDiagPage
         string verdict = bad.Count == 0
             ? "離してから 15 ミリ秒未満の押し直しはありませんでした(0 回でも壊れていないとは限りません)"
             : $"{string.Join("・", bad.Select(r => r.Name))} で、離してから 15 ミリ秒未満の押し直しがありました。接点がへたっている可能性があります";
-        Save(_chatterSaved, new DiagRecord("chatter", "ボタンの検査", DateTime.UtcNow, pad.Name, _last.Profile?.Name ?? pad.TypeName,
+        Save(_chatterSaved, new DiagRecord("chatter", "ボタンの検査", DateTime.UtcNow, pad.Name, pad.Kind.ToString(),
             values, verdict, [], App.Version));
     }
 
