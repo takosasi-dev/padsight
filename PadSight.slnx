@@ -15,5 +15,6 @@
     <Project Path="tools/OverlayProbe/OverlayProbe.csproj" />
     <Project Path="tools/PadProbe/PadProbe.csproj" />
     <Project Path="tools/PerfProbe/PerfProbe.csproj" />
+    <Project Path="tools/StartSmoke/StartSmoke.csproj" />
   </Folder>
 </Solution>

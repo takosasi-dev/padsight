@@ -1,0 +1,17 @@
+<!-- StartSmoke: App.Main と同じ順で、起動の最初の 2 歩(new App・InitializeComponent)だけをして終わる。 -->
+<!-- 窓もトレイもホットキーも作らない(Run しない)。静的な初期化で落ちる失敗(2026-11-17 に配布版で踏んだ)を、配る前と CI で止める。 -->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PadSight.App\PadSight.App.csproj" />
+  </ItemGroup>
+
+</Project>

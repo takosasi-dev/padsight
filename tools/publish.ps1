@@ -13,6 +13,10 @@ $dist = Join-Path $root 'dist'
 $out = Join-Path $dist 'PadSight'
 if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Recurse -Force }
 
+# Refuse to package an exe that dies on its first two start-up steps (it happened on 2026-11-17).
+& dotnet run --project (Join-Path $root 'tools\StartSmoke\StartSmoke.csproj') -c Release
+if ($LASTEXITCODE -ne 0) { throw "start smoke failed (exit $LASTEXITCODE)" }
+
 $project = Join-Path $root 'src\PadSight.App\PadSight.App.csproj'
 & dotnet publish $project -c Release -r win-x64 --self-contained true '-p:PublishSingleFile=true' '-p:IncludeNativeLibrariesForSelfExtract=true' -o $out
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed (exit $LASTEXITCODE)" }

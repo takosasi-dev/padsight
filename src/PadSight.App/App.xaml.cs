@@ -40,8 +40,9 @@ public partial class App : Application
 
     public Settings Settings { get; private set; } = new();
     public SessionStore Sessions { get; private set; } = null!;
-    /// <summary>診断の結果の記録(FR-60)。</summary>
-    public DiagStore Diagnostics { get; } = new(DataDir);
+    /// <summary>診断の結果の記録(FR-60)。OnStartup で作る。部品の初期値で DataDir に触ると、WPF が pack:// を使えるようになる前に
+    /// 静的な初期化(アイコンの読み込み)が走り、起動の直後に落ちる(2026-11-17 に踏んだ)。</summary>
+    public DiagStore Diagnostics { get; private set; } = null!;
     public SnapshotBus Bus { get; } = new();
     public PanelManager Panels { get; private set; } = null!;
     public ObservableCollection<Banner> Banners { get; } = [];
@@ -80,6 +81,7 @@ public partial class App : Application
             SetBanner("newer", "新しい版の PadSight で保存された設定です。読み取りだけで開いています", "Warning");
 
         Sessions = new SessionStore(DataDir);
+        Diagnostics = new DiagStore(DataDir);
         Sessions.SaveFailedChanged += failed => Dispatcher.BeginInvoke(() =>
         {
             if (failed) SetBanner("save", "統計を保存できませんでした。ディスクの空きを確かめてください", "Warning");
