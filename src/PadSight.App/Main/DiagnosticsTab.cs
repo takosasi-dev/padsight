@@ -4,7 +4,9 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using PadSight.App.Main.Diag;
 using PadSight.Core;
+using PadSight.Core.Diag;
 
 namespace PadSight.App.Main;
 
@@ -45,6 +47,14 @@ public sealed class DiagnosticsTab : UserControl
     readonly Dictionary<string, string> _profileByGuid = []; // 手で選んだプロファイル(起動している間だけ覚える)
     string _padsKey = "";
     bool _tapOn;
+    // 報告の間隔の参考値(§9.20)。ページが測っている間の DiagSample と、参考値がまだ無いうちにスティックが動いた直後の 2 秒だけ積む分で数える
+    // 出すのはそのパッドで測れた一番短い間隔(イベントは値が変わったときだけ来るので、少なく数えることはあっても多くは数えない)
+    readonly PollingRate _rate = new();
+    PollingStats? _rateBest;
+    uint? _ratePad;
+    (StickValue, StickValue) _rateSticks;
+    long _rateWantUntil, _rateShownAt;
+    string _rateText = "—";
 
     public IReadOnlyList<IDiagPage> Pages { get; }
 
@@ -57,7 +67,7 @@ public sealed class DiagnosticsTab : UserControl
             new PlaceholderPage("トリガー"),
             new PlaceholderPage("振動"),
             new PlaceholderPage("放置監視"),
-            new PlaceholderPage("履歴"),
+            new HistoryPage(),
         ];
         foreach (var p in Pages)
             _nav.Items.Add(new ListBoxItem { Content = p.Title, Tag = p });
@@ -105,10 +115,10 @@ public sealed class DiagnosticsTab : UserControl
         if (pad is not null && !s.Pads.Any(p => p.InstanceId == pad.InstanceId))
             pad = null;
         var profile = pad is null ? null : PadProfiles.ById(_profileByGuid.GetValueOrDefault(pad.Guid)) ?? PadProfiles.For(pad);
-        _info.Text = pad is null ? "パッドが見つかりません" : Info(pad, s);
 
         var page = CurrentPage;
-        SetTap(page?.WantsSamples == true && IsVisible);
+        bool rateWants = RateWantsSamples(pad, s);
+        SetTap((page?.WantsSamples == true || rateWants) && IsVisible);
         _mine.Clear();
         if (_tapOn)
         {
@@ -116,9 +126,10 @@ public sealed class DiagnosticsTab : UserControl
             App.Current.DrainDiag(_drain);
             if (pad is not null)
                 foreach (var d in _drain)
-                    if (d.PadId == pad.InstanceId) _mine.Add(d);
+                    if (d.PadId == pad.InstanceId) { _mine.Add(d); _rate.Feed(d.Ns); }
         }
-        page?.Render(new DiagContext(s, nowNs, pad, profile, _mine));
+        _info.Text = pad is null ? "パッドが見つかりません" : Info(pad, s, RateText());
+        page?.Render(new DiagContext(s, nowNs, pad, profile, page.WantsSamples ? _mine : []));
     }
 
     /// <summary>Esc・タブを離れた・窓を閉じたとき。</summary>
@@ -162,7 +173,45 @@ public sealed class DiagnosticsTab : UserControl
         _profile.SelectedIndex = Math.Max(0, _profile.Items.Cast<ComboBoxItem>().ToList().FindIndex(i => (string)i.Tag == want));
     }
 
-    static string Info(PadInfo p, PadSnapshot s)
+    /// <summary>参考値がまだ無く、選んだパッドのスティックが今動いた(2 秒以内)ときだけ真。測れたら止める(D-9: 見ているだけの間は積まない)。</summary>
+    bool RateWantsSamples(PadInfo? pad, PadSnapshot s)
+    {
+        if (pad?.InstanceId != _ratePad)
+        {
+            _ratePad = pad?.InstanceId;
+            _rate.Reset();
+            _rateBest = null;
+            _rateShownAt = 0;
+        }
+        if (pad is null || !s.Sticks.TryGetValue(pad.InstanceId, out var sticks))
+            return false;
+        long now = Environment.TickCount64;
+        if (sticks != _rateSticks)
+        {
+            _rateSticks = sticks;
+            if (_rateBest is null)
+                _rateWantUntil = now + 2000;
+        }
+        return now < _rateWantUntil && _rateBest is null;
+    }
+
+    /// <summary>文字は 0.5 秒ごとにだけ替える(上の帯の測り直しを減らす)。</summary>
+    string RateText()
+    {
+        long now = Environment.TickCount64;
+        if (now - _rateShownAt < 500)
+            return _rateText;
+        _rateShownAt = now;
+        if (_rate.Stats is { Ready: true } cur && (_rateBest is null || cur.MedianIntervalMs < _rateBest.MedianIntervalMs))
+            _rateBest = cur;
+        var st = _rateBest;
+        var inv = CultureInfo.InvariantCulture;
+        _rateText = st is null ? "—(スティックを動かすと測ります)"
+            : $"{st.MedianIntervalMs.ToString(st.MedianIntervalMs < 1 ? "0.00" : "0.0", inv)} ms(約 {st.Hz.ToString("0", inv)} Hz)";
+        return _rateText;
+    }
+
+    static string Info(PadInfo p, PadSnapshot s, string rate)
     {
         var inv = CultureInfo.InvariantCulture;
         string conn = p.Connection switch { "Wired" => "USB", "Wireless" => "ワイヤレス", _ => "つなぎ方は不明" };
@@ -175,7 +224,8 @@ public sealed class DiagnosticsTab : UserControl
             "NoBattery" => "電池なし(有線)",
             _ => "電池は不明",
         } : "電池は不明";
-        return $"{p.TypeName}  ・  {conn}  ・  {ids}  ・  {power}";
+        return $"{p.TypeName}  ・  {conn}  ・  {ids}  ・  {power}  ・  報告の間隔 {rate}"
+            + "\n報告の間隔は SDL が受け取った間隔の参考値です。パッドの実際の報告の間隔と同じとは限りません";
     }
 }
 
