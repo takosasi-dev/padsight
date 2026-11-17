@@ -36,6 +36,7 @@ public partial class App : Application
     Measure? _measure;
     bool _renderHooked, _quitting;
     System.Windows.Threading.DispatcherTimer? _statusTimer;
+    readonly DriftWatch _drift = new();
 
     public Settings Settings { get; private set; } = new();
     public SessionStore Sessions { get; private set; } = null!;
@@ -397,6 +398,31 @@ public partial class App : Application
             ClearBanner("sdl");
         if (s.DuplicateWarning) SetBannerOnce("dup", "同じ操作で 2 台が動いています。表示するパッドを固定してください", "Warning");
         else ClearBanner("dup");
+        if (!DemoRunning)
+            WatchDrift(s);
+    }
+
+    /// <summary>FR-52: 割り当てのあるパッドのスティックのずれを裏で見張り、触っていない間の平均がデッドゾーンを超えていたら帯で 1 回知らせる。</summary>
+    void WatchDrift(PadSnapshot s)
+    {
+        ulong now = SnapshotBus.NowNs(s);
+        var mapped = s.Pads.Where(p => p.IsMapped && s.Sticks.ContainsKey(p.InstanceId)).ToList();
+        foreach (var gone in _drift.Retain([.. mapped.Select(p => p.InstanceId)]))
+        {
+            ClearBanner($"drift{gone}L"); // 外れたら忘れる。帯も下ろす
+            ClearBanner($"drift{gone}R");
+        }
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        foreach (var p in mapped)
+        {
+            var (left, right) = s.Sticks[p.InstanceId];
+            foreach (var w in _drift.Feed(now, p.InstanceId, p.Name, left, right, Settings.Deadzone))
+            {
+                AppLog.Write($"スティックのずれ: {(w.Right ? "右" : "左")} {w.Mean.ToString("0.000", inv)}");
+                SetBanner(w.Key, $"{w.PadName} の{(w.Right ? "右" : "左")}スティックが、触っていないのに {w.Mean.ToString("0.000", inv)} ずれています(デッドゾーン {w.Deadzone.ToString("0.00", inv)})。スティック診断で確かめられます",
+                    "Warning", "スティック診断を開く", () => { ClearBanner(w.Key); OpenMain(); _main?.SelectTab(2); });
+            }
+        }
     }
 
     void SetBannerOnce(string key, string text, string kind)

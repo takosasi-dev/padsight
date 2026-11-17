@@ -1,5 +1,5 @@
-// メインの画面の外枠(画面設計書 §4.5〜§4.9)。5 つのタブ、上の帯(知らせ)、パネルの表示の状態を持つ。
-// × は隠すだけでトレイに残る(FR-14)。Ctrl+1〜5 でタブを切り替え、Esc は測定やホットキーの受け付けを止める(§5)。
+// メインの画面の外枠(画面設計書 §4.5〜§4.9・§4.8b)。6 つのタブ、上の帯(知らせ)、パネルの表示の状態を持つ。
+// × は隠すだけでトレイに残る(FR-14)。Ctrl+1〜6 でタブを切り替え、Esc は測定やホットキーの受け付けを止める(§5)。
 using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
@@ -19,6 +19,7 @@ public sealed class MainWindow : Window
     readonly DiagTab _diag = new();
     readonly StatsTab _stats = new();
     readonly SettingsTab _settings = new();
+    readonly MeasureTab _measure = new();
 
     public MainWindow()
     {
@@ -39,7 +40,13 @@ public sealed class MainWindow : Window
         _tabs.Items.Add(new TabItem { Header = "スティック診断", Content = _diag });
         _tabs.Items.Add(new TabItem { Header = "統計", Content = _stats });
         _tabs.Items.Add(new TabItem { Header = "設定", Content = _settings });
-        _tabs.SelectionChanged += (_, e) => { if (e.Source == _tabs && _tabs.SelectedItem is TabItem { Content: StatsTab st }) st.Reload(); };
+        _tabs.Items.Add(new TabItem { Header = "計測", Content = _measure });
+        _tabs.SelectionChanged += (_, e) =>
+        {
+            if (e.Source != _tabs) return;
+            if (_tabs.SelectedItem is TabItem { Content: StatsTab st }) st.Reload();
+            if (_tabs.SelectedItem is not TabItem { Content: MeasureTab }) _measure.Cancel(); // 描画が止まると時間を測れないので、離れたら止める
+        };
 
         _state.HorizontalAlignment = HorizontalAlignment.Right;
         _state.Margin = new Thickness(0, 4, 12, 0);
@@ -57,8 +64,11 @@ public sealed class MainWindow : Window
         RebuildBanners();
         UpdateState();
         PreviewKeyDown += OnKey;
-        Closing += (_, e) => { e.Cancel = true; _diag.Cancel(); Hide(); };
+        Closing += (_, e) => { e.Cancel = true; _diag.Cancel(); _measure.Cancel(); Hide(); };
     }
+
+    /// <summary>タブを選ぶ(0 から。2 はスティック診断)。帯のボタンから使う。</summary>
+    public void SelectTab(int index) => _tabs.SelectedIndex = index;
 
     void UpdateState() => _state.Text = "パネル: " + (App.Current.Panels.Arranging ? "配置を直しています" : App.Current.Panels.Visible ? "表示中" : "隠しています");
 
@@ -86,6 +96,7 @@ public sealed class MainWindow : Window
             case TabItem { Content: PanelsTab p }: p.Render(s, nowNs); break;
             case TabItem { Content: DiagTab d }: d.Render(s); break;
             case TabItem { Content: StatsTab st }: st.Render(s); break;
+            case TabItem { Content: MeasureTab m }: m.Render(s, nowNs); break;
         }
         if (_tabs.SelectedItem is not TabItem { Content: HomeTab })
             _home.TrackBackground(s, IsActive); // 裏の入力の確かめは、タブを移っても続ける
@@ -99,7 +110,7 @@ public sealed class MainWindow : Window
             e.Handled = true;
             return;
         }
-        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key is >= Key.D1 and <= Key.D5)
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key is >= Key.D1 and <= Key.D6)
         {
             _tabs.SelectedIndex = e.Key - Key.D1;
             e.Handled = true;
@@ -107,6 +118,7 @@ public sealed class MainWindow : Window
         else if (e.Key == Key.Escape)
         {
             _diag.Cancel();
+            _measure.Cancel();
             _home.CancelCheck();
         }
     }
