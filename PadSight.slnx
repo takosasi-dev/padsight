@@ -14,5 +14,6 @@
   <Folder Name="/tools/">
     <Project Path="tools/OverlayProbe/OverlayProbe.csproj" />
     <Project Path="tools/PadProbe/PadProbe.csproj" />
+    <Project Path="tools/PerfProbe/PerfProbe.csproj" />
   </Folder>
 </Solution>
