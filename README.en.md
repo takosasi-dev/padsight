@@ -3,7 +3,8 @@
 [日本語](README.md)
 
 A Windows tray app that shows your gamepad input in four small panels overlaid on top of your game.
-It only reads the pad. It never sends anything to the pad or to the game.
+It only reads the pad. It never sends anything to the pad or to the game, except a vibration test that runs only when you press its button on the diagnostics page.
+It also includes the features of PadLab, a controller diagnostics tool, as the diagnostics tab.
 
 The user interface is in Japanese only.
 
@@ -13,7 +14,14 @@ The user interface is in Japanese only.
 
 - **Pad view**: pressed buttons, D-pad, stick position and click, and trigger travel, drawn as a pad. Xbox, PlayStation, Switch Pro, Joy-Con pair, arcade stick and generic layouts; chosen automatically from the pad type
 - **Input history**: direction (numpad notation) and pressed buttons, one row per change, newest first, with each row's length in frames (60 / 120 / 144 / 240) or milliseconds. Near-simultaneous presses are merged into one row showing their offset, and motions such as 236 and 623 are recognised and badged
-- **Sticks**: left and right stick position, trail and values, plus trigger values. The main window can measure the resting drift and the outer range shape of a stick, check that triggers return to 0% and reach 100%, and count presses that came right after a release (a sign of a worn switch)
+- **Sticks**: left and right stick position, trail and values, plus trigger values
+- **Diagnostics** (merged from PadLab): pad info (USB / wireless, battery, an SDL-observed report interval) and six pages
+  - Buttons: check that every button of the model responds (Xbox, Elite 2, DualShock 4, DualSense, DualSense Edge, Switch Pro, generic), back paddles, and presses that came right after a release (a sign of a worn switch)
+  - Sticks: resting drift, outer range shape, snapback, resolution, response smoothness, and a suggested deadzone
+  - Triggers: the last 5 seconds of values, and whether they return to 0% and reach 100%
+  - Vibration: left/right motors (and Xbox trigger motors), 0.5 s each, only when you press a button
+  - Idle watch: records stray presses and wobble while the pad sits untouched
+  - History: saved results and a PNG report image
 - **Stats**: session length, input count, inputs in the last 60 seconds, peak inputs per second (mashing speed) and per-button counts. Per-pad lifetime totals are kept too, with the most-pressed buttons shaded on the pad picture. Per-session totals are kept and can be viewed by period, as a 30-day bar chart, or exported as CSV
 - **Measure**: a 10-second mashing test (count, peak per second, interval spread) and a reaction-time test. A home banner warns when an untouched stick drifts beyond the deadzone
 - The pad view flashes a short glow around a button the moment it is pressed
@@ -38,7 +46,7 @@ It does:
 
 It does not:
 
-- Send anything to the pad (rumble, lights, mode switches)
+- Send anything to the pad (rumble, lights, mode switches), except the vibration test on the diagnostics page, which sends 0.5 s of vibration only when you press its button. Bluetooth PlayStation pads may not vibrate, because of a setting that keeps other apps working
 - Touch the game's process, memory or windows, or draw inside the game (it only shows its own transparent windows)
 - Read keyboard or mouse input (only the registered hotkeys)
 - Store the order or timing of inputs, or require administrator rights. The only network use is two GitHub requests (downloading the controller mapping list when you press the button, and a new-version check at startup that you can turn off); no pad data or stats are sent
