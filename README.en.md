@@ -12,9 +12,11 @@ The user interface is in Japanese only.
 ## Features
 
 - **Pad view**: pressed buttons, D-pad, stick position and click, and trigger travel, drawn as a pad. Xbox, PlayStation, Switch Pro, Joy-Con pair, arcade stick and generic layouts; chosen automatically from the pad type
-- **Input history**: direction (numpad notation) and pressed buttons, one row per change, newest first, with each row's length in frames (60 / 120 / 144 / 240) or milliseconds
+- **Input history**: direction (numpad notation) and pressed buttons, one row per change, newest first, with each row's length in frames (60 / 120 / 144 / 240) or milliseconds. Near-simultaneous presses are merged into one row showing their offset, and motions such as 236 and 623 are recognised and badged
 - **Sticks**: left and right stick position, trail and values, plus trigger values. The main window can measure the resting drift and the outer range shape of a stick, check that triggers return to 0% and reach 100%, and count presses that came right after a release (a sign of a worn switch)
 - **Stats**: session length, input count, inputs in the last 60 seconds, peak inputs per second (mashing speed) and per-button counts. Per-pad lifetime totals are kept too, with the most-pressed buttons shaded on the pad picture. Per-session totals are kept and can be viewed by period, as a 30-day bar chart, or exported as CSV
+- **Measure**: a 10-second mashing test (count, peak per second, interval spread) and a reaction-time test. A home banner warns when an untouched stick drifts beyond the deadzone
+- The pad view flashes a short glow around a button the moment it is pressed
 - Panels let clicks through to the window below and never take focus. Hotkeys hide all panels, enter the arrange mode, clear the history and pause the history (defaults Ctrl+Alt+G / J / H / F)
 - Panels can be dragged, or rearranged in one click to the corners or stacked on the left or right
 - Panel color themes: Classic, Neon, Light, High contrast, and a custom theme with your own background, line and text colors
