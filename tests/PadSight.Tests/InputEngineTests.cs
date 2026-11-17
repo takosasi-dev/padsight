@@ -146,7 +146,8 @@ public class InputEngineTests
     [Fact]
     public void ThirtyPerSecondForSixtySeconds_Counts1800()
     {
-        var (e, _) = Start();
+        // 押下の間隔がちょうど 2/60 秒で、既定の同時押しのまとめ(FR-50。境目を含む)に入るため、ここではまとめを切って行の数を見る
+        var (e, _) = Start(T.Config() with { MergeFrames = 0 });
         for (int i = 0; i < 1800; i++)
             e.Tap((ulong)i * 33_333_333UL, i % 2 == 0 ? PadButton.South : PadButton.East);
         ulong end = 1799 * 33_333_333UL + 20 * T.Ms;

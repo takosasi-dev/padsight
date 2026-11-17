@@ -1,4 +1,4 @@
-// S2 パネル(画面設計書 §4.6・仕様書 FR-5・FR-10・FR-18・FR-20・FR-22・FR-24)。
+// S2 パネル(画面設計書 §4.6・仕様書 FR-5・FR-10・FR-18・FR-20・FR-22・FR-24・FR-50・FR-51)。
 // 左に 4 つのパネル、真ん中に設定、右に見本を置く。どの値も変えた時点でパネルと見本に効き、保存される。
 using System.Globalization;
 using System.Text.RegularExpressions;
@@ -255,6 +255,11 @@ public sealed class PanelsTab : UserControl
             h.DirectionSource, v => { h.DirectionSource = v; Changed(); })));
         stack.Children.Add(Ui.Slider("方向とみなす倒し具合", 0.20, 0.90, 0.05, h.StickThreshold, "0.00", v => { h.StickThreshold = v; Changed(); }));
         stack.Children.Add(Ui.Row("方向の出し方", Ui.Combo([("arrow", "矢印"), ("number", "数字")], h.DirectionStyle, v => { h.DirectionStyle = v; Changed(); })));
+        // FR-50・FR-51。0 は「まとめない」、ほかは最初の押下からの窓
+        stack.Children.Add(Ui.Row("同時押しをまとめる", Ui.Combo(
+            [("0", "まとめない"), .. Enumerable.Range(1, 5).Select(i => (i.ToString(CultureInfo.InvariantCulture), $"{i}/60 秒以内"))],
+            h.MergeFrames.ToString(CultureInfo.InvariantCulture), v => { h.MergeFrames = int.Parse(v, CultureInfo.InvariantCulture); Changed(); })));
+        stack.Children.Add(Ui.Check("コマンドを見分ける", h.Motions, v => { h.Motions = v; Changed(); }));
         stack.Children.Add(Ui.Section("出すボタン"));
         var wrap = new WrapPanel();
         foreach (var key in Settings.AllHistoryButtonKeys.Where(k => !k.StartsWith("Dpad", StringComparison.Ordinal)))
@@ -270,6 +275,7 @@ public sealed class PanelsTab : UserControl
         }
         stack.Children.Add(wrap);
         stack.Children.Add(Ui.Weak("変えた設定は次の行から効きます。十字キーは方向に入るので、ボタンとしては出しません"));
+        stack.Children.Add(Ui.Weak("コマンドは、ボタンの前 20/60 秒の方向の並びから 41236・63214・623・421・236・214・22 を見分け、数字で出します"));
     }
 
     void BuildStick(StackPanel stack, Settings s)

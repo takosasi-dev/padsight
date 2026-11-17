@@ -7,9 +7,18 @@ public sealed record EngineConfig(
     string DirectionSource, float StickThreshold, IReadOnlyList<string> HistoryButtons,
     float TriggerThreshold, int IdleMinutes, int TrailMs, string SelectionMode, string? PinnedGuid)
 {
+    /// <summary>同時押しをまとめる窓(60 分の 1 秒が単位。FR-50)。</summary>
+    public int MergeFrames { get; init; } = 2;
+    /// <summary>コマンドを見分けるか(FR-51)。</summary>
+    public bool Motions { get; init; } = true;
+
     public static EngineConfig From(Settings s) => new(
         s.History.DirectionSource, (float)s.History.StickThreshold, s.HistoryButtonKeys,
-        (float)s.TriggerThreshold, s.SessionIdleMinutes, s.TrailMs, s.SelectionMode, s.PinnedGuid);
+        (float)s.TriggerThreshold, s.SessionIdleMinutes, s.TrailMs, s.SelectionMode, s.PinnedGuid)
+    {
+        MergeFrames = s.History.MergeFrames,
+        Motions = s.History.Motions,
+    };
 }
 
 public sealed class InputEngine
@@ -52,6 +61,8 @@ public sealed class InputEngine
         _config = c;
         _historyKeys = [.. c.HistoryButtons];
         _state.TriggerThreshold = c.TriggerThreshold;
+        _history.MergeWindowNs = HistoryBuilder.MergeWindowOf(c.MergeFrames);
+        _history.Motions = c.Motions;
         _session.IdleMinutes = c.IdleMinutes;
         bool selChanged = _selector.Mode != c.SelectionMode || _selector.PinnedGuid != c.PinnedGuid;
         _selector.Mode = c.SelectionMode;
