@@ -14,7 +14,8 @@ using PadSight.Input;
 
 namespace PadSight.App;
 
-public sealed record Banner(string Key, string Text, string Kind);
+/// <param name="ActionText">帯の右に置くボタンの文字。null なら置かない</param>
+public sealed record Banner(string Key, string Text, string Kind, string? ActionText = null, Action? OnAction = null);
 
 public partial class App : Application
 {
@@ -115,6 +116,13 @@ public partial class App : Application
         AppLog.Write("起動: パネルを出した");
         if (!e.Args.Contains("--tray"))
             OpenMain();
+        if (Settings.UpdateCheckOnStart)
+        {
+            // FR-44: 起動の 10 秒後に 1 回だけ(起動の速さに響かないように)
+            var later = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+            later.Tick += async (_, _) => { later.Stop(); await CheckForUpdate(silent: true); };
+            later.Start();
+        }
         AppLog.Write("起動を終えた");
     }
 
@@ -165,12 +173,57 @@ public partial class App : Application
 
     public void ClearHistory() => _input.Post(engine => engine.ClearHistory());
 
-    public void SetBanner(string key, string text, string kind)
+    public void SetBanner(string key, string text, string kind, string? actionText = null, Action? onAction = null)
     {
         ClearBanner(key);
-        Banners.Add(new Banner(key, text, kind));
+        Banners.Add(new Banner(key, text, kind, actionText, onAction));
     }
 
+    /// <summary>FR-43: 割り当ての一覧を取ってきて、確かめてから置き換え、つなぎ直す。結果の文を返す。</summary>
+    public async Task<string> DownloadMappings()
+    {
+        var r = await WebFetch.Mapping();
+        if (r.Text is null)
+            return "取り込めませんでした: " + r.Error;
+        if (MappingDb.Check(r.Text) is not int n)
+        {
+            AppLog.Write("割り当ての一覧の形が違ったので置き換えなかった");
+            return "取り込めませんでした: 割り当ての一覧の形ではありませんでした";
+        }
+        try
+        {
+            Directory.CreateDirectory(DataDir);
+            File.WriteAllText(MappingFile + ".tmp", r.Text, new System.Text.UTF8Encoding(false));
+            File.Move(MappingFile + ".tmp", MappingFile, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Error("割り当ての一覧の保存", ex);
+            return "取り込めませんでした: 保存できませんでした";
+        }
+        AppLog.Write($"割り当ての一覧を取り込んだ(Windows の行 {n})");
+        ReconnectInput();
+        return $"割り当ての一覧(Windows 向け {n} 件)を取り込みました。パッドをつなぎ直します";
+    }
+
+    /// <summary>FR-44: 新しい版を確かめる。silent(起動時)なら、新しい版があるときだけ帯を出し、ほかはログに 1 行。結果の文を返す。</summary>
+    public async Task<string> CheckForUpdate(bool silent)
+    {
+        var r = await WebFetch.LatestRelease();
+        if (r.Text is null)
+        {
+            AppLog.Write("新しい版の確認: " + (r.NotFound ? "公開した版なし" : r.Error));
+            return r.NotFound ? "まだ公開した版はありません" : "確かめられませんでした: " + r.Error;
+        }
+        if (ReleaseCheck.Newer(r.Text, Version) is { } newer)
+        {
+            AppLog.Write("新しい版の確認: " + newer.Tag + " がある");
+            SetBanner("update", $"新しい版 {newer.Tag} があります", "Weak", "公開のページを開く", () => ShellOpen.ReleasePage(newer.Url));
+            return $"新しい版 {newer.Tag} があります";
+        }
+        AppLog.Write("新しい版の確認: 最新");
+        return silent ? "" : $"今の版({Version})が最新です";
+    }
     public void ClearBanner(string key)
     {
         foreach (var b in Banners.Where(b => b.Key == key).ToList())

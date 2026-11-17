@@ -69,7 +69,8 @@ public sealed class MainWindow : Window
         {
             var t = Ui.Text(b.Text);
             t.Margin = new Thickness(16, 6, 16, 6);
-            var border = new Border { Child = t, BorderThickness = new Thickness(0, 0, 0, 1) };
+            UIElement child = b.ActionText is { } label && b.OnAction is { } act ? Ui.Horizontal(t, Ui.Button(label, act)) : t;
+            var border = new Border { Child = child, BorderThickness = new Thickness(0, 0, 0, 1) };
             border.SetResourceReference(Border.BorderBrushProperty, b.Kind == "Weak" ? "BorderBrush" : b.Kind + "Brush");
             if (b.Kind != "Weak")
                 t.SetResourceReference(TextBlock.ForegroundProperty, b.Kind + "Brush");

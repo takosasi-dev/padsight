@@ -20,6 +20,8 @@ The user interface is in Japanese only.
 - Panel color themes: Classic, Neon, Light, High contrast, and a custom theme with your own background, line and text colors
 - Save the panel layout, colors and shown rows as named profiles and switch between them by hand
 - A demo mode plays a fixed input pattern so you can see the panels move without a pad (demo input is not counted in the stats)
+- A button in Settings downloads the public controller mapping list (SDL_GameControllerDB) so unknown pads and arcade sticks show proper button names
+- At startup PadSight tells you when a newer version has been published (can be turned off; it never downloads or replaces itself)
 - Lives in the system tray and can start at sign-in
 
 ![Main window (home)](docs/images/home.png)
@@ -37,7 +39,7 @@ It does not:
 - Send anything to the pad (rumble, lights, mode switches)
 - Touch the game's process, memory or windows, or draw inside the game (it only shows its own transparent windows)
 - Read keyboard or mouse input (only the registered hotkeys)
-- Store the order or timing of inputs, use the network, or require administrator rights
+- Store the order or timing of inputs, or require administrator rights. The only network use is two GitHub requests (downloading the controller mapping list when you press the button, and a new-version check at startup that you can turn off); no pad data or stats are sent
 
 ## Please read before use
 
@@ -78,13 +80,13 @@ Other tools:
 | `tools\PadProbe` | Prints pads and input events to the console (`PadProbe hints` / `list --config A` / `watch --config A --seconds 60`) |
 | `tools\OverlayProbe` | Shows a single overlay window to test click-through |
 | `tests\fixtures\DummyGame` | A full-screen test window that only counts clicks |
-| `tools\check.ps1` | Searches the source for APIs that would touch other processes, the network or write to pads |
+| `tools\check.ps1` | Searches the source for APIs that would touch other processes, use the network outside WebFetch.cs, or write to pads |
 
 Data lives in `%LOCALAPPDATA%\PadSight\` (settings, session totals, logs). To add controller mappings, place `gamecontrollerdb.txt` from [SDL_GameControllerDB](https://github.com/mdqinc/SDL_GameControllerDB) in the same folder (up to 1 MB).
 
 ## Status
 
-v0.1.0 (in development). All features are in place and the unit tests (212) pass, but **it has not yet been tested with real pads**. The default input backend, the check that pads are left unchanged, and performance measurements are still to be done on real hardware.
+v0.1.0 (in development). All features are in place and the unit tests (231) pass, but **it has not yet been tested with real pads**. The default input backend, the check that pads are left unchanged, and performance measurements are still to be done on real hardware.
 
 ## License
 

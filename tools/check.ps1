@@ -1,4 +1,4 @@
-# check.ps1 - forbidden-string search for PadSight (spec 9.12 / NFR-10, INV-11, INV-16).
+# check.ps1 - forbidden-string search for PadSight (spec 9.12 / NFR-10, INV-9, INV-11, INV-16).
 # Scans src, tests and tools under the repo root (bin and obj skipped) and prints "file:line: pattern".
 # Exit 1 if anything is found, else prints "check: 0 hits" and exits 0. Keep this file ASCII only.
 $ErrorActionPreference = 'Stop'
@@ -18,7 +18,7 @@ $banned = @(
     'GetAsyncKeyState', 'GetKeyboardState', 'RegisterRawInputDevices', 'SDL_INIT_VIDEO',
     'FindWindow', 'EnumWindows', 'GetForegroundWindow', 'SetForegroundWindow', 'WindowFromPoint',
     'GetWindowThreadProcessId',
-    'HttpClient', 'Socket', 'WebClient', 'WebRequest'
+    'Socket', 'WebClient', 'WebRequest'
 )
 
 # INV-11: native imports are allowed only in these files (paths relative to the repo root).
@@ -29,6 +29,9 @@ $importAllowed = @(
     'src\PadSight.App\ShellOpen.cs',
     'tools\OverlayProbe\Win32Window.cs'
 )
+
+# INV-9: the network is allowed only in this file (two fixed GitHub URLs, spec 9.17).
+$netAllowed = 'src\PadSight.App\WebFetch.cs'
 
 $extensions = @('.cs', '.xaml', '.csproj', '.props', '.ps1', '.json', '.txt')
 $ic = [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
@@ -42,6 +45,7 @@ $always += New-Rule 'pragma warning disable RS0030' 'pragma\s+warning\s+disable.
 $importRules = @('DllImport', 'LibraryImport' | ForEach-Object { New-Rule $_ ([regex]::Escape($_)) })
 $overlayCoreRule = New-Rule 'PadSight (INV-16)' 'PadSight'
 $projectRefRule = New-Rule 'ProjectReference (INV-16)' 'ProjectReference'
+$netRule = New-Rule 'HttpClient (INV-9)' 'HttpClient'
 
 $hits = New-Object System.Collections.Generic.List[string]
 
@@ -60,6 +64,7 @@ foreach ($dir in @('src', 'tests', 'tools')) {
         $rel = $file.FullName.Substring($root.Length).TrimStart('\')
         $rules = $always
         if (-not ($importAllowed -contains $rel)) { $rules += $importRules }
+        if ($rel -ne $netAllowed) { $rules += $netRule }
         if ($rel -like 'src\OverlayCore\*') { $rules += $overlayCoreRule }
         if ($rel -eq 'src\OverlayCore\OverlayCore.csproj') { $rules += $projectRefRule }
 

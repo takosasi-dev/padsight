@@ -14,6 +14,7 @@ public sealed class SettingsTab : UserControl
 {
     readonly StackPanel _stack = new();
     int _capturing;
+    string _mapNote = "";
     TextBlock? _captureText;
 
     public SettingsTab()
@@ -51,8 +52,40 @@ public sealed class SettingsTab : UserControl
         int? count = app.Bus.Latest.MappingCount;
         _stack.Children.Add(Ui.Text(!File.Exists(app.MappingFile) ? "gamecontrollerdb.txt: 置いていません"
             : count is null ? "gamecontrollerdb.txt: 次の起動で読みます"
-            : count >= 0 ? $"gamecontrollerdb.txt: 読んだ件数 {count}" : "割り当てのファイルを読めませんでした"));
-        _stack.Children.Add(Ui.Horizontal(Ui.Button("データのフォルダを開く", () => ShellOpen.Folder(App.DataDir))));
+            : count >= 0 ? $"gamecontrollerdb.txt: SDL が新しく足した件数 {count}(SDL にもともと入っている物は数えません)" : "割り当てのファイルを読めませんでした"));
+        // FR-43: 押したときだけ取りに行く
+        var mapNote = Ui.Weak(_mapNote);
+        mapNote.VerticalAlignment = VerticalAlignment.Center;
+        Button? fetch = null;
+        fetch = Ui.Button("割り当ての一覧を取りに行く", async () =>
+        {
+            fetch!.IsEnabled = false;
+            mapNote.Text = "取りに行っています…";
+            _mapNote = await app.DownloadMappings();
+            // つなぎ直しが済んでから、上の件数の行を作り直す
+            var later = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+            later.Tick += (_, _) => { later.Stop(); Build(); };
+            later.Start();
+            mapNote.Text = _mapNote;
+        });
+        _stack.Children.Add(Ui.Horizontal(Ui.Button("データのフォルダを開く", () => ShellOpen.Folder(App.DataDir)), fetch, mapNote));
+        _stack.Children.Add(Ui.Weak("GitHub の SDL_GameControllerDB(zlib ライセンス)から取ります。今のファイルは置き換わります"));
+
+        // FR-44
+        _stack.Children.Add(Ui.Section("新しい版"));
+        _stack.Children.Add(Ui.Check("起動したときに新しい版を確かめる", s.UpdateCheckOnStart, v => { s.UpdateCheckOnStart = v; app.SaveSettings(); }));
+        var updNote = Ui.Weak();
+        updNote.VerticalAlignment = VerticalAlignment.Center;
+        Button? check = null;
+        check = Ui.Button("今すぐ確かめる", async () =>
+        {
+            check!.IsEnabled = false;
+            updNote.Text = "確かめています…";
+            updNote.Text = await app.CheckForUpdate(silent: false);
+            check.IsEnabled = true;
+        });
+        _stack.Children.Add(Ui.Horizontal(check, updNote));
+        _stack.Children.Add(Ui.Weak("GitHub の公開のページに新しい版があるかだけを確かめます。取ってきて入れ替えることはしません"));
 
         _stack.Children.Add(Ui.Section("セッション"));
         _stack.Children.Add(Ui.Slider("操作の無い時間で区切る(分)", 1, 60, 1, s.SessionIdleMinutes, "0", v => { s.SessionIdleMinutes = (int)v; app.SaveSettings(); }));

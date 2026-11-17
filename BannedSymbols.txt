@@ -1,5 +1,5 @@
 T:System.Diagnostics.Process;INV-1: do not touch other processes
-T:System.Net.Http.HttpClient;INV-9: no network
+// HttpClient is allowed only in src/PadSight.App/WebFetch.cs (INV-9); tools/check.ps1 enforces that.
 T:System.Net.Sockets.Socket;INV-9: no network
 T:System.Net.WebClient;INV-9: no network
 T:System.Net.WebRequest;INV-9: no network

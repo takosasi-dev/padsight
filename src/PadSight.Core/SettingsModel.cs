@@ -67,6 +67,8 @@ public sealed class Settings
     public string InputWgi { get; set; } = "default";
     public bool InputHidapiPlayStation { get; set; } = true;
     public bool InputHidapiSwitch { get; set; } = true;
+    /// <summary>FR-44: 起動したときに新しい版を確かめる。</summary>
+    public bool UpdateCheckOnStart { get; set; } = true;
 
     /// <summary>FR-42: 名前 → { overlay, history_rows, stats_rows }。値は当てるときに Parse で確かめる。</summary>
     public Dictionary<string, JsonObject> Profiles { get; set; } = [];
@@ -181,6 +183,7 @@ public sealed class Settings
         s.InputWgi = r.Choice("input.wgi", ["default", "on", "off"], s.InputWgi);
         s.InputHidapiPlayStation = r.Bool("input.hidapi_playstation", true);
         s.InputHidapiSwitch = r.Bool("input.hidapi_switch", true);
+        s.UpdateCheckOnStart = r.Bool("update.check_on_start", true);
         // 形の違うプロファイルはそれだけ捨てる。ログには名前を出さない(利用者が付けた名前なので)
         var profs = r.Get("profiles");
         if (profs is JsonObject po)
@@ -247,6 +250,7 @@ public sealed class Settings
             ["export"] = new JsonObject { ["grindlog_game"] = GrindLogGame, ["grindlog_type"] = GrindLogType },
             ["hotkeys"] = new JsonObject { ["toggle"] = HotkeyToggle, ["arrange"] = HotkeyArrange, ["clear_history"] = HotkeyClearHistory },
             ["input"] = new JsonObject { ["wgi"] = InputWgi, ["hidapi_playstation"] = InputHidapiPlayStation, ["hidapi_switch"] = InputHidapiSwitch },
+            ["update"] = new JsonObject { ["check_on_start"] = UpdateCheckOnStart },
             ["profiles"] = new JsonObject(Profiles.Select(kv => KeyValuePair.Create(kv.Key, (JsonNode?)kv.Value.DeepClone()))),
         };
         return o.ToJsonString(new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
