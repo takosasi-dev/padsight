@@ -13,7 +13,7 @@ public sealed class SessionStore : IDisposable
     readonly string _dir;
     readonly BlockingCollection<Action> _queue = [];
     readonly Thread _thread;
-    readonly List<string> _pending = [];
+    readonly List<SessionRecord> _pending = [];
 
     public SessionStore(string dataDir)
     {
@@ -45,19 +45,53 @@ public sealed class SessionStore : IDisposable
 
     public void Append(IReadOnlyList<SessionRecord> records)
     {
-        var lines = records.Select(r => SessionJson.ToLine(r with { LastOperationUtc = null }, TimeZoneInfo.Local)).ToList();
         _queue.Add(() =>
         {
-            _pending.AddRange(lines);
-            bool ok = TryIo(() => File.AppendAllText(SessionsPath, string.Concat(_pending.Select(l => l + "\n")), Utf8));
+            _pending.AddRange(records);
+            string text = string.Concat(_pending.Select(r => SessionJson.ToLine(r with { LastOperationUtc = null }, TimeZoneInfo.Local) + "\n"));
+            bool ok = TryIo(() => File.AppendAllText(SessionsPath, text, Utf8));
             if (ok)
             {
+                AddToPadTotals(_pending);
                 _pending.Clear();
                 TryIo(() => File.Delete(CurrentPath));
                 Appended?.Invoke();
             }
             SaveFailedChanged?.Invoke(!ok);
         });
+    }
+
+    string PadsPath => Path.Combine(_dir, "pads.json");
+
+    /// <summary>FR-38: 書けたセッションの GUID ごとの回数を pads.json に足す。読めなければ名前を変えて空から始める。</summary>
+    void AddToPadTotals(IEnumerable<SessionRecord> records)
+    {
+        var totals = ReadPadTotals(renameBroken: true);
+        foreach (var r in records)
+            totals.Add(r);
+        TryIo(() =>
+        {
+            File.WriteAllText(PadsPath + ".tmp", totals.ToJson(TimeZoneInfo.Local), Utf8);
+            File.Move(PadsPath + ".tmp", PadsPath, overwrite: true);
+        });
+    }
+
+    /// <summary>パッドごとの通算を読む。無ければ空。</summary>
+    public PadTotals ReadPadTotals(bool renameBroken = false)
+    {
+        if (!File.Exists(PadsPath))
+            return new PadTotals();
+        try
+        {
+            return PadTotals.Parse(File.ReadAllText(PadsPath, Encoding.UTF8));
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or FormatException or InvalidOperationException or IOException)
+        {
+            AppLog.Write("pads.json を読めなかった: " + ex.Message);
+            if (renameBroken)
+                TryIo(() => File.Move(PadsPath, $"{PadsPath}.broken-{DateTime.UtcNow.ToLocalTime():yyyyMMdd-HHmmss}"));
+            return new PadTotals();
+        }
     }
 
     /// <summary>進行中のセッションを 60 秒ごとに書き換える(§9.6.4)。</summary>

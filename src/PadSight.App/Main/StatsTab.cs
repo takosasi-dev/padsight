@@ -13,7 +13,8 @@ namespace PadSight.App.Main;
 
 public sealed class StatsTab : UserControl
 {
-    sealed record Row(string Start, string Length, string Inputs, string PerMin, string Peak, string Top);
+    sealed record Row(string Start, string Length, string Inputs, string PerMin, string Peak, string Peak1, string Top);
+    sealed record PadTotalRow(string Name, string Kind, string Inputs, string Top, string LastUsed);
 
     readonly ComboBox _period;
     readonly Button _split, _export;
@@ -24,6 +25,8 @@ public sealed class StatsTab : UserControl
     readonly Button _openFolder;
     readonly ListView _list = new() { MinHeight = 200 };
     readonly TextBlock _empty = Ui.Weak("この期間の記録はありません");
+    readonly ListView _padList = new() { MinHeight = 80 };
+    readonly TextBlock _padEmpty = Ui.Weak("まだ記録がありません");
     string _periodValue = "week";
     List<SessionRecord> _all = [];
     List<SessionRecord> _inPeriod = [];
@@ -39,7 +42,7 @@ public sealed class StatsTab : UserControl
         _openFolder.Visibility = Visibility.Collapsed;
         var grid = new GridView();
         foreach (var (h, p, w) in new[] { ("始まり", nameof(Row.Start), 110.0), ("長さ", nameof(Row.Length), 80.0), ("入力", nameof(Row.Inputs), 80.0),
-            ("1 分あたり", nameof(Row.PerMin), 90.0), ("60 秒の最大", nameof(Row.Peak), 90.0), ("多いボタン", nameof(Row.Top), 300.0) })
+            ("1 分あたり", nameof(Row.PerMin), 90.0), ("60 秒の最大", nameof(Row.Peak), 90.0), ("1 秒の最大", nameof(Row.Peak1), 80.0), ("多いボタン", nameof(Row.Top), 260.0) })
             grid.Columns.Add(new GridViewColumn { Header = h, Width = w, DisplayMemberBinding = new Binding(p) });
         _list.View = grid;
         var stack = new StackPanel();
@@ -49,6 +52,14 @@ public sealed class StatsTab : UserControl
         stack.Children.Add(_list);
         stack.Children.Add(_empty);
         stack.Children.Add(_bad);
+        var padGrid = new GridView();
+        foreach (var (h, p, w) in new[] { ("パッド", nameof(PadTotalRow.Name), 260.0), ("種類", nameof(PadTotalRow.Kind), 110.0), ("通算の入力", nameof(PadTotalRow.Inputs), 100.0),
+            ("多いボタン", nameof(PadTotalRow.Top), 240.0), ("最後に使った日", nameof(PadTotalRow.LastUsed), 110.0) })
+            padGrid.Columns.Add(new GridViewColumn { Header = h, Width = w, DisplayMemberBinding = new Binding(p) });
+        _padList.View = padGrid;
+        stack.Children.Add(Ui.Section("パッドごとの通算"));
+        stack.Children.Add(_padList);
+        stack.Children.Add(_padEmpty);
         Content = Ui.Scroll(stack);
         App.Current.Sessions.Appended += () => Dispatcher.BeginInvoke(Reload);
     }
@@ -58,10 +69,26 @@ public sealed class StatsTab : UserControl
         var (records, bad) = App.Current.Sessions.ReadAll();
         _all = records;
         _bad.Text = bad > 0 ? $"読めなかった行: {bad}" : "";
+        RefreshPads();
         Refresh();
     }
 
     public void Render(PadSnapshot s) => _split.IsEnabled = s.SessionActive;
+
+    /// <summary>FR-38: パッドごとの通算を、入力の多い順に出す。期間には関係なく全部。</summary>
+    void RefreshPads()
+    {
+        var inv = CultureInfo.InvariantCulture;
+        var pads = App.Current.Sessions.ReadPadTotals().Pads.Values.OrderByDescending(p => p.Inputs).ToList();
+        _padList.ItemsSource = pads.Select(p => new PadTotalRow(
+            p.Name,
+            Enum.TryParse<PadKind>(p.Kind, out var k) ? HomeTab.KindName(k) : p.Kind,
+            p.Inputs.ToString("N0", inv),
+            string.Join(" / ", p.Buttons.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).Take(3)
+                .Select(kv => $"{Labels.ForRecord(kv.Key, p.Kind)} {kv.Value.ToString("N0", inv)}")),
+            p.LastUsedUtc.ToLocalTime().ToString("yyyy/MM/dd", inv))).ToList();
+        _padEmpty.Visibility = pads.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     void Refresh()
     {
@@ -85,6 +112,7 @@ public sealed class StatsTab : UserControl
             r.Inputs.ToString("N0", inv),
             r.DurationSeconds > 0 ? (r.Inputs / (r.DurationSeconds / 60.0)).ToString("0.0", inv) : "—",
             r.PeakPerMinute.ToString(inv),
+            r.PeakPerSecond.ToString(inv),
             string.Join(" / ", r.Buttons.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).Take(3)
                 .Select(kv => $"{Labels.ForRecord(kv.Key, r.PadKind)} {kv.Value}")))).ToList();
         _empty.Visibility = _inPeriod.Count == 0 ? Visibility.Visible : Visibility.Collapsed;

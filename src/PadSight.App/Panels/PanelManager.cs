@@ -104,7 +104,7 @@ public sealed class PanelManager
 
     void Apply(string name)
     {
-        var e = _entries.First(x => x.Name == name);
+        var e = _entries.First(en => en.Name == name);
         var s = _settings();
         var p = s.Panels[name];
         if (name == "history")
@@ -175,9 +175,60 @@ public sealed class PanelManager
         p.Monitor = null;
         p.X = p.Y = null;
         _save();
-        var e = _entries.First(x => x.Name == name);
+        var e = _entries.First(en => en.Name == name);
         if (e.Window.IsVisible)
             PlaceDefault(e);
+    }
+
+    /// <summary>出ているパネルをまとめて置き直す。"corners" は既定の四隅、"left"・"right" は主モニターの左右の端に上から縦に並べる。</summary>
+    public void ArrangePreset(string preset)
+    {
+        var m = MonitorInfo.Primary();
+        double y = Margin, column = Margin, columnWidth = 0;
+        foreach (var e in _entries.Where(e => e.Window.IsVisible))
+        {
+            if (preset == "corners")
+                PlaceDefault(e);
+            else
+            {
+                var p = _settings().Panels[e.Name];
+                double w = e.Window.BaseSize.Width * p.Scale / 100.0, h = e.Window.BaseSize.Height * p.Scale / 100.0;
+                if (y > Margin && y + h > m.WorkHeightDip - Margin)
+                {
+                    // 下に収まらなければ、内側に 2 列目を作る
+                    column += columnWidth + 12;
+                    columnWidth = 0;
+                    y = Margin;
+                }
+                columnWidth = Math.Max(columnWidth, w);
+                double x = preset == "left" ? column : m.WorkWidthDip - column - w;
+                e.Window.PlaceAt(m, x, y);
+                y += h + 12;
+            }
+            SavePlacement(e.Name, e.Window);
+        }
+    }
+
+    /// <summary>今いるモニターの作業領域の左上からの位置(DIP)で置く。</summary>
+    public void SetPosition(string name, double x, double y)
+    {
+        var e = _entries.First(en => en.Name == name);
+        if (!e.Window.IsVisible)
+            return;
+        e.Window.PlaceAt(MonitorInfo.ForWindow(e.Window), x, y);
+        if (e.Window.IsMostlyOffscreen())
+            PlaceDefault(e);
+        SavePlacement(name, e.Window);
+    }
+
+    /// <summary>出ているパネルの、今の位置(DIP)。出ていなければ null。</summary>
+    public (double X, double Y)? Position(string name)
+    {
+        var e = _entries.First(en => en.Name == name);
+        if (!e.Window.IsVisible)
+            return null;
+        var (_, x, y) = e.Window.Placement();
+        return (Math.Round(x), Math.Round(y));
     }
 
     void PlaceDefault(Entry e)

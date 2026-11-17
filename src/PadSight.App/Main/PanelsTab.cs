@@ -63,6 +63,7 @@ public sealed class PanelsTab : UserControl
         stack.Children.Add(Ui.Slider("不透明度(%)", 20, 100, 1, p.Opacity, "0", v => { p.Opacity = (int)v; Changed(); }));
         stack.Children.Add(Ui.Slider("背景の濃さ(%)", 0, 100, 1, p.BackgroundOpacity, "0", v => { p.BackgroundOpacity = (int)v; Changed(); }));
         stack.Children.Add(Ui.Horizontal(Ui.Button("既定の位置に戻す", () => App.Current.Panels.ResetPosition(name))));
+        stack.Children.Add(PositionRow(name));
         stack.Children.Add(Ui.Section("このパネルの設定"));
         switch (name)
         {
@@ -74,6 +75,33 @@ public sealed class PanelsTab : UserControl
         _settingsHost.Content = stack;
         _previewBox.Child = _previews[name];
         _dirty = true;
+    }
+
+    /// <summary>位置を数で入れる欄。今いるモニターの作業領域の左上からの DIP。Enter か欄を離れたときに動かす。</summary>
+    static UIElement PositionRow(string name)
+    {
+        var pos = App.Current.Panels.Position(name);
+        var x = new TextBox { Width = 70, Text = pos?.X.ToString(CultureInfo.InvariantCulture) ?? "", IsEnabled = pos is not null };
+        var y = new TextBox { Width = 70, Text = pos?.Y.ToString(CultureInfo.InvariantCulture) ?? "", IsEnabled = pos is not null, Margin = new Thickness(8, 0, 0, 0) };
+        var note = Ui.Weak(pos is null ? "パネルを出しているときに変えられます" : "画面の左上からの位置(Enter で動かす)");
+        note.Margin = new Thickness(8, 0, 0, 0);
+        void Apply()
+        {
+            if (double.TryParse(x.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var vx)
+                && double.TryParse(y.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var vy))
+                App.Current.Panels.SetPosition(name, vx, vy);
+            if (App.Current.Panels.Position(name) is { } p)
+            {
+                x.Text = p.X.ToString(CultureInfo.InvariantCulture);
+                y.Text = p.Y.ToString(CultureInfo.InvariantCulture);
+            }
+        }
+        foreach (var box in new[] { x, y })
+        {
+            box.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) Apply(); };
+            box.LostFocus += (_, _) => Apply();
+        }
+        return Ui.Row("位置 X・Y", Ui.Horizontal(x, y, note));
     }
 
     void BuildPad(StackPanel stack, Settings s)
@@ -151,7 +179,7 @@ public sealed class PanelsTab : UserControl
 
     void BuildStats(StackPanel stack, Settings s)
     {
-        var names = new Dictionary<string, string> { ["session"] = "セッション", ["inputs"] = "入力", ["last60"] = "直近 60 秒", ["peak"] = "60 秒の最大", ["top5"] = "上位 5 つ" };
+        var names = new Dictionary<string, string> { ["session"] = "セッション", ["inputs"] = "入力", ["last60"] = "直近 60 秒", ["peak"] = "60 秒の最大", ["peak1s"] = "1 秒の最大(連打)", ["top5"] = "上位 5 つ" };
         foreach (var key in Settings.StatsRowNames)
         {
             stack.Children.Add(Ui.Check(names[key], s.StatsRows.Contains(key), on =>

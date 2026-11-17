@@ -15,15 +15,15 @@ public sealed class HistoryView : PanelView
 
     sealed class Row
     {
-        public required TextBlock Frames;
+        public required OutlineText Frames;
         public required Path Arrow;
         public required Ellipse Dot;
-        public required TextBlock Number;
-        public required TextBlock Buttons;
+        public required OutlineText Number;
+        public required OutlineText Buttons;
     }
 
     readonly List<Row> _rows = [];
-    readonly TextBlock _empty;
+    readonly OutlineText _empty;
     int _built = -1;
 
     public HistoryView() : base(240, 20 * RowHeight + 16)
@@ -54,7 +54,8 @@ public sealed class HistoryView : PanelView
             {
                 row.Frames.Text = "";
                 row.Arrow.Visibility = row.Dot.Visibility = row.Number.Visibility = Visibility.Hidden;
-                row.Buttons.Inlines.Clear();
+                row.Buttons.SetRuns([]);
+                row.Buttons.Tag = null;
                 continue;
             }
             var h = s.History[i];
@@ -72,11 +73,9 @@ public sealed class HistoryView : PanelView
             row.Dot.Visibility = arrow && angle is null ? Visibility.Visible : Visibility.Hidden;
             if (angle is double a)
                 ((RotateTransform)row.Arrow.RenderTransform).Angle = a;
-            row.Buttons.Inlines.Clear();
-            foreach (var k in h.NewlyPressed)
-                row.Buttons.Inlines.Add(new Run(Labels.For(k, skin, settings.LabelStyle, pad) + " ") { Foreground = pressed });
-            foreach (var k in h.Held)
-                row.Buttons.Inlines.Add(new Run($"({Labels.For(k, skin, settings.LabelStyle, pad)}) ") { Foreground = Draw.Weak });
+            row.Buttons.SetRuns(
+                h.NewlyPressed.Select(k => (Labels.For(k, skin, settings.LabelStyle, pad) + " ", pressed))
+                .Concat(h.Held.Select(k => ($"({Labels.For(k, skin, settings.LabelStyle, pad)}) ", Draw.Weak))));
         }
     }
 
@@ -94,11 +93,11 @@ public sealed class HistoryView : PanelView
             double y = 8 + i * RowHeight;
             var row = new Row
             {
-                Frames = new TextBlock { FontFamily = Draw.Mono, FontSize = 15, Foreground = Brushes.White, Width = 56, TextAlignment = TextAlignment.Right },
+                Frames = new OutlineText { FontFamily = Draw.Mono, FontSize = 15, Foreground = Brushes.White, Width = 56, TextAlignment = TextAlignment.Right },
                 Arrow = Draw.Arrow(16),
                 Dot = new Ellipse { Width = 5, Height = 5, Fill = Brushes.White },
-                Number = new TextBlock { FontFamily = Draw.Mono, FontSize = 15, Foreground = Brushes.White },
-                Buttons = new TextBlock { FontFamily = Draw.Ui, FontSize = 15, Foreground = Brushes.White, Width = 150, TextTrimming = TextTrimming.CharacterEllipsis },
+                Number = new OutlineText { FontFamily = Draw.Mono, FontSize = 15, Foreground = Brushes.White },
+                Buttons = new OutlineText { FontFamily = Draw.Ui, FontSize = 15, Foreground = Brushes.White, Width = 150, TextTrimming = TextTrimming.CharacterEllipsis },
             };
             Canvas.Children.Add(row.Frames.At(4, y));
             Canvas.Children.Add(row.Arrow.At(78, y + 11));

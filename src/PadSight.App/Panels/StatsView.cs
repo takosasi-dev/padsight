@@ -13,10 +13,10 @@ public sealed class StatsView : PanelView
 {
     readonly StackPanel _stack = new() { Margin = new Thickness(12, 8, 12, 8) };
     string _builtRows = "";
-    TextBlock? _session, _inputs, _last60, _peak, _none;
-    readonly List<(TextBlock Name, Rectangle Bar, TextBlock Count)> _top = [];
+    OutlineText? _session, _inputs, _last60, _peak, _peak1, _none;
+    readonly List<(OutlineText Name, Rectangle Bar, OutlineText Count)> _top = [];
 
-    public StatsView() : base(260, 200)
+    public StatsView() : base(260, 230) // 1 秒の最大の行(FR-37)を足したので、仕様書 §9.10.2 の 200 から広げた
     {
         Canvas.Children.Add(_stack);
     }
@@ -43,6 +43,7 @@ public sealed class StatsView : PanelView
         if (_inputs is not null) _inputs.Text = v.Active ? v.Inputs.ToString("N0", inv) : "—";
         if (_last60 is not null) _last60.Text = v.Active ? v.Last60.ToString("N0", inv) : "—";
         if (_peak is not null) _peak.Text = v.Active ? v.Peak.ToString("N0", inv) : "—";
+        if (_peak1 is not null) _peak1.Text = v.Active ? v.Peak1s.ToString("N0", inv) : "—";
         var skin = Labels.ChooseSkin(s.Pad, s.Pad is null ? null : settings.Devices.GetValueOrDefault(s.Pad.Guid));
         long max = v.Top5.Count > 0 ? v.Top5[0].Value : 1;
         for (int i = 0; i < _top.Count; i++)
@@ -61,7 +62,7 @@ public sealed class StatsView : PanelView
         _builtRows = string.Join(",", rows);
         _stack.Children.Clear();
         _top.Clear();
-        _session = _inputs = _last60 = _peak = null;
+        _session = _inputs = _last60 = _peak = _peak1 = null;
         _none = Draw.Text("", 12);
         _none.Foreground = Draw.Weak;
         _stack.Children.Add(_none);
@@ -73,6 +74,7 @@ public sealed class StatsView : PanelView
                 case "inputs": _inputs = Line("入力"); break;
                 case "last60": _last60 = Line("直近60秒"); break;
                 case "peak": _peak = Line("60秒の最大"); break;
+                case "peak1s": _peak1 = Line("1秒の最大"); break;
                 case "top5":
                     for (int i = 0; i < 5; i++)
                     {
@@ -92,7 +94,7 @@ public sealed class StatsView : PanelView
         }
     }
 
-    TextBlock Line(string label)
+    OutlineText Line(string label)
     {
         var g = new Grid { Height = 22 };
         g.Children.Add(Draw.Text(label, 14));

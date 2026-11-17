@@ -11,7 +11,7 @@ namespace PadSight.App.Main;
 
 public sealed class HomeTab : UserControl
 {
-    sealed record PadRow(string Name, string Kind, string Shown, string Skin, string Guid);
+    sealed record PadRow(string Name, string Kind, string Shown, string Skin, string Guid, uint Id);
 
     readonly Button _toggle, _arrange, _check;
     readonly TextBlock _checkText = Ui.Weak();
@@ -62,6 +62,10 @@ public sealed class HomeTab : UserControl
 
         var stack = new StackPanel();
         stack.Children.Add(Ui.Horizontal(_toggle, _arrange, _check, Ui.Button("PadSight を終了", () => App.Current.Quit()), _checkText));
+        stack.Children.Add(Ui.Horizontal(Ui.Text("まとめて置き直す  "),
+            Ui.Button("四隅", () => App.Current.Panels.ArrangePreset("corners")),
+            Ui.Button("左側に縦に並べる", () => App.Current.Panels.ArrangePreset("left")),
+            Ui.Button("右側に縦に並べる", () => App.Current.Panels.ArrangePreset("right"))));
         stack.Children.Add(Ui.Weak($"パネルの位置は「配置を直す」({App.Current.Settings.HotkeyArrange ?? "ホットキーなし"})のあと、ドラッグで動かせます。右下のつまみで大きさも変わります。次の起動でも同じ位置に出ます"));
         stack.Children.Add(Ui.Section("パッド"));
         stack.Children.Add(_list);
@@ -138,12 +142,16 @@ public sealed class HomeTab : UserControl
                 var skin = Labels.ChooseSkin(p, settings.Devices.GetValueOrDefault(p.Guid));
                 string manual = settings.Devices.GetValueOrDefault(p.Guid) ?? "auto";
                 return new PadRow(p.Name, KindName(p.Kind), p.InstanceId == s.Pad?.InstanceId ? "表示中" : "—",
-                    manual == "auto" ? $"自動({SkinName(skin)})" : SkinName(skin), p.Guid);
+                    manual == "auto" ? $"自動({SkinName(skin)})" : SkinName(skin), p.Guid, p.InstanceId);
             }).ToList();
             _empty.Visibility = s.Pads.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             _same.Visibility = s.Pads.GroupBy(p => p.Guid).Any(g => g.Count() > 1) ? Visibility.Visible : Visibility.Collapsed;
         }
-        _mini.Render(s, settings, nowNs);
+        // 一覧で選んだ行のパッドを描く(パネルの表示は変えない)。選んでいなければ表示中のパッド
+        var view = _list.SelectedItem is PadRow row && s.Live.TryGetValue(row.Id, out var live)
+            ? s with { Pad = live.Info, Connected = true, Pressed = live.Pressed, Left = live.Left, Right = live.Right, LeftTrigger = live.LeftTrigger, RightTrigger = live.RightTrigger, Raw = live.Raw }
+            : s;
+        _mini.Render(view, settings, nowNs);
     }
 
     public static string KindName(PadKind k) => k switch

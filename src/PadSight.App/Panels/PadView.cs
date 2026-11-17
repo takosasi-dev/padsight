@@ -88,7 +88,7 @@ public sealed class PadView : PanelView
     }
 
     readonly List<Part> _parts = [];
-    readonly List<TextBlock> _raw = [];
+    readonly List<OutlineText> _raw = [];
     string _builtFor = "";
     Skin _lastSkin = Skin.Generic;
 

@@ -23,6 +23,7 @@ public sealed class MainWindow : Window
     public MainWindow()
     {
         Title = "PadSight";
+        Icon = App.Icon;
         Width = 960;
         Height = 680;
         MinWidth = 780;

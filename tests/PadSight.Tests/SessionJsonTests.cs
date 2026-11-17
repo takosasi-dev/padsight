@@ -19,7 +19,9 @@ public class SessionJsonTests
         Assert.Equal("PlayStation", r.PadKind);
         Assert.Equal(1201, r.Buttons["South"]);
         Assert.Null(r.LastOperationUtc);
-        Assert.Equal(SpecSample, SessionJson.ToLine(r, Jst));
+        // FR-37 より前の行(peakPerSecond が無い)は 0 で読み、書くときは peakPerSecond が加わる(AC-45)
+        Assert.Equal(0, r.PeakPerSecond);
+        Assert.Equal(SpecSample.Replace("\"peakPerMinute\":182,", "\"peakPerMinute\":182,\"peakPerSecond\":0,"), SessionJson.ToLine(r, Jst));
     }
 
     [Fact]

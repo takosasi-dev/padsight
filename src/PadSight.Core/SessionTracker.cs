@@ -7,7 +7,17 @@ public sealed record SessionRecord(
     Guid Id, DateTime StartUtc, DateTime EndUtc, long DurationSeconds,
     string PadKind, string PadName, long Inputs, int PeakPerMinute,
     IReadOnlyDictionary<string, long> Buttons,
-    DateTime? LastOperationUtc = null);
+    DateTime? LastOperationUtc = null)
+{
+    /// <summary>1 秒の最大(FR-37)。</summary>
+    public int PeakPerSecond { get; init; }
+
+    /// <summary>パッドの GUID ごとの回数(FR-38)。sessions.jsonl には書かず、pads.json に足すために使う。</summary>
+    public IReadOnlyDictionary<string, PadTally> PerPad { get; init; } = new Dictionary<string, PadTally>();
+}
+
+/// <summary>1 台のパッドの、1 セッション分の回数。</summary>
+public sealed record PadTally(string Name, string Kind, long Inputs, IReadOnlyDictionary<string, long> Buttons);
 
 public sealed class SessionTracker
 {
@@ -26,6 +36,9 @@ public sealed class SessionTracker
     readonly Dictionary<string, long> _buttons = [];
     readonly Dictionary<uint, (PadInfo Info, long Count)> _perPad = [];
     readonly Queue<ulong> _recent = new();
+    readonly Queue<ulong> _recent1 = new();
+    int _peak1;
+    readonly Dictionary<string, (PadInfo Info, long Inputs, Dictionary<string, long> Buttons)> _perGuid = [];
     long? _prevDuration, _prevInputs;
 
     public SessionTracker(IClock clock, Func<Guid>? newId = null)
@@ -56,6 +69,9 @@ public sealed class SessionTracker
             _buttons.Clear();
             _perPad.Clear();
             _recent.Clear();
+            _recent1.Clear();
+            _peak1 = 0;
+            _perGuid.Clear();
         }
         _lastOpNs = ns;
         return closed;
@@ -70,6 +86,18 @@ public sealed class SessionTracker
         _buttons[key] = _buttons.GetValueOrDefault(key) + 1;
         if (pad is not null)
             _perPad[pad.InstanceId] = (pad, (_perPad.TryGetValue(pad.InstanceId, out var p) ? p.Count : 0) + 1);
+        if (pad is not null)
+        {
+            if (!_perGuid.TryGetValue(pad.Guid, out var g))
+                g = (pad, 0, new Dictionary<string, long>());
+            g.Buttons[key] = g.Buttons.GetValueOrDefault(key) + 1;
+            _perGuid[pad.Guid] = (g.Info, g.Inputs + 1, g.Buttons);
+        }
+        // FR-37: この入力から 1 秒前までの数の最大
+        _recent1.Enqueue(ns);
+        while (ns - _recent1.Peek() >= Values.NsPerSecond)
+            _recent1.Dequeue();
+        _peak1 = Math.Max(_peak1, _recent1.Count);
         _recent.Enqueue(ns);
         Recount(ns);
     }
@@ -104,7 +132,7 @@ public sealed class SessionTracker
     public SessionView View() => new(
         _active, _startNs, _inputs, _last60, _peak,
         _buttons.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).Take(5).ToList(),
-        _prevDuration, _prevInputs);
+        _prevDuration, _prevInputs) { Peak1s = _peak1 };
 
     ulong IdleNs => (ulong)IdleMinutes * 60 * Values.NsPerSecond;
 
@@ -130,6 +158,10 @@ public sealed class SessionTracker
         var endUtc = _startUtc.AddTicks((long)((_lastOpNs - _startNs) / 100));
         return new SessionRecord(_id, _startUtc, endUtc, seconds,
             pad?.Kind.ToString() ?? "", pad?.Name ?? "", _inputs, _peak,
-            _buttons.Where(kv => kv.Value > 0).ToDictionary(), lastOpUtc);
+            _buttons.Where(kv => kv.Value > 0).ToDictionary(), lastOpUtc)
+        {
+            PeakPerSecond = _peak1,
+            PerPad = _perGuid.ToDictionary(kv => kv.Key, kv => new PadTally(kv.Value.Info.Name, kv.Value.Info.Kind.ToString(), kv.Value.Inputs, new Dictionary<string, long>(kv.Value.Buttons))),
+        };
     }
 }

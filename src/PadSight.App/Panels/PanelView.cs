@@ -15,7 +15,7 @@ public abstract class PanelView : UserControl
         Width = width;
         Height = height;
         Canvas = new Canvas { Width = width, Height = height, ClipToBounds = true };
-        StatusText = new TextBlock
+        StatusText = new OutlineText
         {
             Foreground = Brushes.White, FontSize = 16, FontFamily = Draw.Ui, HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed,
@@ -28,7 +28,7 @@ public abstract class PanelView : UserControl
     }
 
     protected Canvas Canvas { get; }
-    TextBlock StatusText { get; }
+    OutlineText StatusText { get; }
 
     /// <summary>スナップショットの版が変わったとき、または時間で変わる表示を更新するときに呼ぶ。</summary>
     public abstract void Render(PadSnapshot s, Settings settings, ulong nowNs);
@@ -50,6 +50,76 @@ public abstract class PanelView : UserControl
         InputStatus.Failed => "入力の部品を準備できませんでした",
         _ => s.Connected ? null : "未接続",
     };
+}
+
+/// <summary>黒い縁取りの付いた文字。明るい画面の上でも読めるように、周りに 8 回ずらして黒で描いてから本体を描く。
+/// 影の効果(DropShadowEffect)はソフトウェア描画になるので使わない(TaskDeck 規約 §1.3)。</summary>
+public sealed class OutlineText : FrameworkElement
+{
+    static readonly Brush Halo = Draw.Freeze(new SolidColorBrush(Color.FromArgb(200, 0, 0, 0)));
+    static readonly (double X, double Y)[] Offsets = [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)];
+
+    string _text = "";
+    List<(string Text, Brush Brush)>? _runs;
+    Brush _foreground = Brushes.White;
+    double _fontSize = 12;
+    FontFamily _fontFamily = Draw.Ui;
+
+    public string Text
+    {
+        get => _runs is null ? _text : string.Concat(_runs.Select(r => r.Text));
+        set { if (_runs is null && _text == value) return; _text = value; _runs = null; InvalidateMeasure(); InvalidateVisual(); }
+    }
+
+    public Brush Foreground { get => _foreground; set { _foreground = value; InvalidateVisual(); } }
+    public double FontSize { get => _fontSize; set { _fontSize = value; InvalidateMeasure(); } }
+    public FontFamily FontFamily { get => _fontFamily; set { _fontFamily = value; InvalidateMeasure(); } }
+    public TextAlignment TextAlignment { get; set; }
+    public TextTrimming TextTrimming { get; set; }
+
+    /// <summary>色の違う文字を並べる(入力履歴のボタン)。</summary>
+    public void SetRuns(IEnumerable<(string Text, Brush Brush)> runs)
+    {
+        _runs = [.. runs];
+        InvalidateMeasure();
+        InvalidateVisual();
+    }
+
+    FormattedText Build(bool halo)
+    {
+        var ft = new FormattedText(Text, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+            new Typeface(_fontFamily, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal), _fontSize,
+            halo ? Halo : _foreground, VisualTreeHelper.GetDpi(this).PixelsPerDip)
+        { TextAlignment = TextAlignment, Trimming = TextTrimming, MaxLineCount = 3 };
+        if (!double.IsNaN(Width))
+            ft.MaxTextWidth = Math.Max(1, Width - 2);
+        if (!halo && _runs is not null)
+        {
+            int at = 0;
+            foreach (var (t, b) in _runs)
+            {
+                if (t.Length > 0) ft.SetForegroundBrush(b, at, t.Length);
+                at += t.Length;
+            }
+        }
+        return ft;
+    }
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        var ft = Build(true);
+        return new Size(double.IsNaN(Width) ? ft.WidthIncludingTrailingWhitespace + 2 : Width, ft.Height + 2);
+    }
+
+    protected override void OnRender(DrawingContext dc)
+    {
+        if (Text.Length == 0)
+            return;
+        var halo = Build(true);
+        foreach (var (x, y) in Offsets)
+            dc.DrawText(halo, new Point(1 + x, 1 + y));
+        dc.DrawText(Build(false), new Point(1, 1));
+    }
 }
 
 public static class Draw
@@ -83,7 +153,7 @@ public static class Draw
         return e;
     }
 
-    public static TextBlock Text(string text, double size = 12, bool mono = false) => new()
+    public static OutlineText Text(string text, double size = 12, bool mono = false) => new OutlineText
     {
         Text = text, Foreground = Brushes.White, FontSize = size, FontFamily = mono ? Mono : Ui,
     };

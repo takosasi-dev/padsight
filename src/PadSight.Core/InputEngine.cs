@@ -153,6 +153,7 @@ public sealed class InputEngine
         {
             Pads = [.. _state.Pads.Values.OrderBy(p => p.Order).Select(p => p.Info)],
             Sticks = _state.Pads.ToDictionary(kv => kv.Key, kv => (kv.Value.Left, kv.Value.Right)),
+            Live = _state.Pads.ToDictionary(kv => kv.Key, kv => Live(kv.Value)),
             LeftTrail = _leftTrail.Recent(nowNs, _config.TrailMs),
             RightTrail = _rightTrail.Recent(nowNs, _config.TrailMs),
             Raw = raw,
@@ -164,6 +165,9 @@ public sealed class InputEngine
             MappingCount = mappingCount,
         };
     }
+
+    static PadLive Live(PadState p) => new(p.Info, new HashSet<PadButton>(p.Pressed), p.Left, p.Right, p.LeftTrigger, p.RightTrigger,
+        p.Info.IsMapped ? null : new RawState([.. p.RawButtons], [.. p.RawAxes.Select(Values.Axis)], [.. p.RawHats]));
 
     void UpdateHistory(ulong ns)
     {

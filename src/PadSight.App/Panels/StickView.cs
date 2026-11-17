@@ -20,11 +20,11 @@ public sealed class StickView : PanelView
         public required Ellipse Deadzone;
         public required Ellipse Knob;
         public required Line[] Trail;
-        public required TextBlock Xy;
-        public required TextBlock Mag;
-        public required TextBlock TriggerLabel;
+        public required OutlineText Xy;
+        public required OutlineText Mag;
+        public required OutlineText TriggerLabel;
         public required Rectangle TriggerFill;
-        public required TextBlock TriggerPct;
+        public required OutlineText TriggerPct;
     }
 
     readonly Side _l, _r;

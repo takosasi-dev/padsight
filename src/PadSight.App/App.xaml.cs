@@ -43,6 +43,9 @@ public partial class App : Application
     public SettingsStore Store => _store;
     public string MappingFile => Path.Combine(DataDir, "gamecontrollerdb.txt");
 
+    /// <summary>トレイとメインの画面のアイコン(自分で描いたパッドの形。メーカーのロゴは使わない)。</summary>
+    public static ImageSource Icon { get; } = System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/padsight.ico"));
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -77,15 +80,18 @@ public partial class App : Application
         });
         Sessions.RecoverCurrent();
 
+        AppLog.Write("起動: 設定とセッションを読んだ");
         Panels = new PanelManager(() => Settings, SaveSettings);
         Panels.StateChanged += UpdateTrayMenu;
         _input = new SdlInputThread(EngineConfig.From(Settings), InputOptionsFrom(Settings), MappingFile,
             Bus.Publish, Sessions.Append, Sessions.WriteCurrent, AppLog.Write);
         _input.Start();
+        AppLog.Write("起動: パネルを作った");
 
         _hotkeys = new HotkeyHost();
         _hotkeys.Pressed += OnHotkey;
         CreateTray();
+        AppLog.Write("起動: トレイを出した");
         RegisterHotkeys();
         if (result == SettingsStore.LoadResult.Broken)
             _tray.ShowNotification("PadSight", "設定を読めなかったので、初めの値で起動しました");
@@ -106,6 +112,7 @@ public partial class App : Application
         }
         else
             Panels.SetVisible(Settings.VisibleOnStart);
+        AppLog.Write("起動: パネルを出した");
         if (!e.Args.Contains("--tray"))
             OpenMain();
         AppLog.Write("起動を終えた");
@@ -231,10 +238,7 @@ public partial class App : Application
         {
             ToolTipText = "PadSight",
             ContextMenu = menu,
-            IconSource = new GeneratedIconSource
-            {
-                Text = "P", Foreground = Brushes.White, Background = new SolidColorBrush(Color.FromRgb(0x4F, 0x8E, 0xF7)), FontSize = 72,
-            },
+            IconSource = Icon,
         };
         _tray.TrayMouseDoubleClick += (_, _) => OpenMain();
         _tray.ForceCreate();

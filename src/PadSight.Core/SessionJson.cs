@@ -25,6 +25,7 @@ public static class SessionJson
             ["pad"] = new JsonObject { ["kind"] = r.PadKind, ["name"] = r.PadName },
             ["inputs"] = r.Inputs,
             ["peakPerMinute"] = r.PeakPerMinute,
+            ["peakPerSecond"] = r.PeakPerSecond,
             ["buttons"] = buttons,
         };
         if (r.LastOperationUtc is { } last)
@@ -53,7 +54,10 @@ public static class SessionJson
                 o["inputs"]!.GetValue<long>(),
                 o["peakPerMinute"]?.GetValue<int>() ?? 0,
                 buttons,
-                o["lastOperation"] is JsonNode lo ? ParseUtc(lo.GetValue<string>()) : null);
+                o["lastOperation"] is JsonNode lo ? ParseUtc(lo.GetValue<string>()) : null)
+            {
+                PeakPerSecond = o["peakPerSecond"]?.GetValue<int>() ?? 0, // FR-37 より前の行は 0
+            };
         }
         catch (Exception ex) when (ex is JsonException or FormatException or InvalidOperationException or NullReferenceException or ArgumentException)
         {

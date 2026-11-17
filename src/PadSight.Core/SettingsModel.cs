@@ -33,7 +33,7 @@ public sealed class HistorySettings
 public sealed class Settings
 {
     public static readonly string[] PanelNames = ["pad", "history", "stick", "stats"];
-    public static readonly string[] StatsRowNames = ["session", "inputs", "last60", "peak", "top5"];
+    public static readonly string[] StatsRowNames = ["session", "inputs", "last60", "peak", "peak1s", "top5"];
     public static readonly string[] SkinNames = ["auto", "xbox", "playstation", "switch_pro", "joycon_pair", "arcade", "generic"];
     public static readonly int[] FrameBases = [60, 120, 144, 240, 0];
 

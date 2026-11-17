@@ -56,12 +56,20 @@ public sealed record HistoryRow(
 public sealed record SessionView(
     bool Active, ulong StartNs, long Inputs, int Last60, int Peak,
     IReadOnlyList<KeyValuePair<string, long>> Top5,
-    long? PreviousDurationSeconds, long? PreviousInputs);
+    long? PreviousDurationSeconds, long? PreviousInputs)
+{
+    /// <summary>1 秒の最大(FR-37)。</summary>
+    public int Peak1s { get; init; }
+}
 
 /// <summary>割り当ての無いジョイスティックの今の値(FR-3)。</summary>
 public sealed record RawState(IReadOnlyList<bool> Buttons, IReadOnlyList<float> Axes, IReadOnlyList<byte> Hats);
 
 public enum InputStatus { Running, Reconnecting, Failed }
+
+/// <summary>1 台のパッドの今の状態。</summary>
+public sealed record PadLive(PadInfo Info, IReadOnlySet<PadButton> Pressed, StickValue Left, StickValue Right,
+    float LeftTrigger, float RightTrigger, RawState? Raw);
 
 public sealed record PadSnapshot(
     long Version, PadInfo? Pad, bool Connected,
@@ -72,6 +80,8 @@ public sealed record PadSnapshot(
     ulong SdlNsAtPublish, long StopwatchAtPublish)
 {
     public IReadOnlyList<PadInfo> Pads { get; init; } = [];
+    /// <summary>全部のパッドの今の状態(ホームで選んだパッドを小さく描くため)。鍵は InstanceId。</summary>
+    public IReadOnlyDictionary<uint, PadLive> Live { get; init; } = new Dictionary<uint, PadLive>();
     /// <summary>全部のパッドの左右のスティック(スティック診断でパッドを選ぶため)。鍵は InstanceId。</summary>
     public IReadOnlyDictionary<uint, (StickValue Left, StickValue Right)> Sticks { get; init; } = new Dictionary<uint, (StickValue, StickValue)>();
     public IReadOnlyList<TrailPoint> LeftTrail { get; init; } = [];
