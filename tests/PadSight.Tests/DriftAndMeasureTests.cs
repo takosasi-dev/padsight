@@ -176,4 +176,11 @@ public class DriftAndMeasureTests
         Assert.Equal(199.0, r.BestMs, 9);
         Assert.Null(ReactionStats.From([]));
     }
+
+    [Fact]
+    public void Drift_DeadzoneZero_UsesFloorSoRestingNoiseIsNotReported()
+    {
+        Assert.Empty(Run(new DriftWatch(), 61, _ => V(0.004f), dz: 0));
+        Assert.Single(Run(new DriftWatch(), 61, _ => V(0.08f), dz: 0)); // 下限 0.05 を超えるずれは知らせる
+    }
 }

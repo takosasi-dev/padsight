@@ -194,6 +194,8 @@ public sealed class PadView : PanelView
     Skin _lastSkin = Skin.Generic;
     // 作り直した直後の Render は押している物を覚えるだけにして光らせない(スキンや表記を変えただけで光らないように)
     bool _primed;
+    ulong _lastRenderNs;
+    const ulong StaleNs = Values.NsPerSecond;
     bool _flashing;
 
     public PadView() : base(360, 240) { }
@@ -389,8 +391,11 @@ public sealed class PadView : PanelView
         var pressedBrush = Draw.Pressed(settings);
         float th = (float)settings.TriggerThreshold;
         // FR-49: 作り直した直後の 1 回と、Windows のアニメーション効果が切のときは光らせない
-        bool flash = _primed && SystemParameters.ClientAreaAnimation;
+        // 隠れていた・ほかのタブだった間に押した物は、出し直した時に光らせない。見えている間は、入力が無くても
+        // セッションの区切りの確かめ(250 ミリ秒ごと)で描き直されるので、1 秒より空いたら隠れていたとみなす
+        bool flash = _primed && SystemParameters.ClientAreaAnimation && Values.Since(nowNs, _lastRenderNs) <= StaleNs;
         _primed = true;
+        _lastRenderNs = nowNs;
         _flashing = false;
         foreach (var p in _parts)
         {

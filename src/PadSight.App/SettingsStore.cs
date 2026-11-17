@@ -32,6 +32,13 @@ public sealed class SettingsStore(string dataDir)
             ReadOnly = newer;
             return (s, LoadResult.Loaded);
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // ほかのプログラムが開いているなど。中身は壊れていないかもしれないので、名前を変えず、上書きもしない
+            AppLog.Error("settings.json の読み込み", ex);
+            ReadOnly = true;
+            return (new Settings(), LoadResult.Broken);
+        }
         catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException or FormatException)
         {
             // ArgumentException は同じキーが 2 つある JSON(.NET 10 の JsonNode が読むときに出す)

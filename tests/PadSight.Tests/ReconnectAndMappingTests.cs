@@ -121,4 +121,25 @@ public class BackwardTimestampTests
         e.Tap(10 * T.S - T.Ms, PadButton.South, 2); // 1 のすぐ後に届いたが時刻は 1 ミリ秒前
         Assert.Equal(1u, e.SelectedId);
     }
+
+    [Fact]
+    public void SlightlyEarlierEvent_DoesNotMakeHistoryRow999()
+    {
+        var b = new HistoryBuilder();
+        b.Update(10 * T.S, 5, ["South"]);
+        b.Update(10 * T.S - 2 * T.Ms, 2, ["South"]); // 2 ミリ秒前の時刻で方向が変わった
+        var closed = b.Rows[1];
+        Assert.Equal("0", HistoryBuilder.FormatLength(closed.EndNs!.Value - closed.StartNs, 60));
+    }
+
+    [Fact]
+    public void Motion_DoesNotMixDirectionsFromPreviousPad()
+    {
+        var b = new HistoryBuilder { Motions = true };
+        b.Update(T.S, 2, []);
+        b.Update(T.S + 2 * T.S / 60, 3, []);
+        b.SourceChanged(); // 表示するパッドが替わった
+        b.Update(T.S + 4 * T.S / 60, 6, ["West"]);
+        Assert.Null(b.Rows[0].Motion);
+    }
 }

@@ -30,6 +30,9 @@ public sealed class HistoryBuilder
     /// <summary>状態を受ける。行が増えたか、一番上の行にまとめたら真。</summary>
     public bool Update(ulong ns, int direction, IReadOnlyList<string> pressed)
     {
+        // 別のスレッドから少し前の時刻のイベントが届いても、一番上の行より前にはしない(行の長さが桁あふれしない)
+        if (_rows.Count > 0 && ns < _rows[0].StartNs)
+            ns = _rows[0].StartNs;
         // 軸のイベントのたびに呼ばれるので、何も変わらないときは物を作らずに返す
         if (direction == _dir && !HasNew(pressed))
         {
@@ -99,7 +102,13 @@ public sealed class HistoryBuilder
     ulong _motionUsedAt;
 
     /// <summary>表示するパッドが替わった。次の押下は、前のパッドの行にまとめない(FR-50)。</summary>
-    public void SourceChanged() => _noMerge = true;
+    public void SourceChanged()
+    {
+        _noMerge = true;
+        // 前のパッドの方向を、次のパッドのボタンのコマンドに混ぜない
+        if (_rows.Count > 0)
+            _motionUsedAt = Math.Max(_motionUsedAt, _rows[0].StartNs);
+    }
 
     /// <summary>出ている行とメモリの行を消す(FR-21)。今の方向と押している物は覚えたまま。</summary>
     public void Clear()

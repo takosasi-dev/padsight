@@ -30,6 +30,9 @@ public sealed class DriftWatch
     readonly Dictionary<(uint Pad, bool Right), Stick> _sticks = [];
 
     /// <summary>1 台のパッドの今の値を足す。判定が出たときだけ警告を返す(左右で最大 2 つ)。</summary>
+    /// <summary>知らせる下限(デッドゾーンがこれより小さいときに使う)。</summary>
+    public const double MinDeadzone = 0.05;
+
     public IReadOnlyList<DriftWarning> Feed(ulong ns, uint padId, string padName, StickValue left, StickValue right, double deadzone)
     {
         List<DriftWarning>? found = null;
@@ -67,7 +70,8 @@ public sealed class DriftWatch
         st.Decided = true; // 判定はパッドとスティックごとに 1 回
         double mx = st.SumX / st.Count, my = st.SumY / st.Count;
         double mean = Math.Min(1.0, Math.Sqrt(mx * mx + my * my));
-        return mean > deadzone ? mean : null;
+        // デッドゾーン 0(円を描かない設定)では、止まっている小さな揺れまで知らせてしまうので、0.05 を下限にする
+        return mean > Math.Max(deadzone, MinDeadzone) ? mean : null;
     }
 
     static bool Still(Queue<(ulong Ns, float X, float Y)> recent)

@@ -419,7 +419,7 @@ public partial class App : Application
             var (left, right) = s.Sticks[p.InstanceId];
             foreach (var w in _drift.Feed(now, p.InstanceId, p.Name, left, right, Settings.Deadzone))
             {
-                AppLog.Write($"スティックのずれ: {(w.Right ? "右" : "左")} {w.Mean.ToString("0.000", inv)}");
+                AppLog.Write($"スティックのずれの知らせを出した({(w.Right ? "右" : "左")})"); // 値は軸の値なのでログに書かない(§9.15)
                 SetBanner(w.Key, $"{w.PadName} の{(w.Right ? "右" : "左")}スティックが、触っていないのに {w.Mean.ToString("0.000", inv)} ずれています(デッドゾーン {w.Deadzone.ToString("0.00", inv)})。スティック診断で確かめられます",
                     "Warning", "スティック診断を開く", () => { ClearBanner(w.Key); OpenMain(); _main?.SelectTab(2); });
             }
