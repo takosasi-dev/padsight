@@ -45,7 +45,7 @@ public sealed class PanelsTab : UserControl
 
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition { MaxWidth = 660 }); // 広い窓でも設定の列は広げすぎず、見本をそのすぐ右に置く
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.45, GridUnitType.Star), MinWidth = 180, MaxWidth = 250 }); // 狭い窓では見本を縮め、真ん中の設定に幅を回す
         grid.Children.Add(_list);
         var scroll = Ui.Scroll(_settingsHost);
@@ -62,6 +62,7 @@ public sealed class PanelsTab : UserControl
         preview.Children.Add(pic);
         Grid.SetColumn(preview, 2);
         grid.Children.Add(preview);
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 余りは右端に残す
         Content = grid;
     }
 

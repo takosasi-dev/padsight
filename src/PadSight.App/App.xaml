@@ -358,7 +358,7 @@
                             <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
                                 <TabPanel IsItemsHost="True" Margin="6,0,0,-1" KeyboardNavigation.TabIndex="1" />
                             </Border>
-                            <ContentPresenter ContentSource="SelectedContent" Margin="{TemplateBinding Padding}" KeyboardNavigation.TabNavigation="Local" />
+                            <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" Margin="{TemplateBinding Padding}" KeyboardNavigation.TabNavigation="Local" />
                         </DockPanel>
                     </ControlTemplate>
                 </Setter.Value>
@@ -468,10 +468,18 @@
             <Setter Property="Padding" Value="6,10,6,7" />
             <Setter Property="Template">
                 <Setter.Value>
+                    <!-- 列の幅は右端のつまみ(見えない、指を置くと左右の矢印)で今までどおり変えられる -->
                     <ControlTemplate TargetType="GridViewColumnHeader">
-                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="0,0,0,1" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" RecognizesAccessKey="True" />
-                        </Border>
+                        <Grid>
+                            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="0,0,0,1" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" RecognizesAccessKey="True" />
+                            </Border>
+                            <Thumb x:Name="PART_HeaderGripper" HorizontalAlignment="Right" Width="9" Margin="0,0,-4,0" Cursor="SizeWE">
+                                <Thumb.Template>
+                                    <ControlTemplate TargetType="Thumb"><Border Background="Transparent" /></ControlTemplate>
+                                </Thumb.Template>
+                            </Thumb>
+                        </Grid>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>

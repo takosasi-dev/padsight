@@ -178,10 +178,20 @@ public static class Ui
     /// <summary>タブの中身。縦にスクロールし、横に広げすぎない(広い窓で行が間延びしないように)。</summary>
     public static ScrollViewer Page(params UIElement[] children)
     {
-        var stack = new StackPanel { MaxWidth = 980, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var stack = new StackPanel();
         foreach (var c in children)
             stack.Children.Add(c);
-        return Scroll(stack);
+        return Scroll(LeftCapped(stack, 980));
+    }
+
+    /// <summary>幅いっぱいに広げるが maxWidth で止め、余りは右に残す(広い窓でも左にそろう。MaxWidth だけだと真ん中に寄る)。</summary>
+    public static Grid LeftCapped(UIElement content, double maxWidth)
+    {
+        var g = new Grid();
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MaxWidth = maxWidth });
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        g.Children.Add(content);
+        return g;
     }
 
     public static ScrollViewer Scroll(UIElement content) => new()
@@ -213,12 +223,16 @@ public static class Ui
     public static GridViewColumn Column(string header, string path, double width, bool number = false)
     {
         var col = new GridViewColumn { Header = header, Width = width };
+        var f = new FrameworkElementFactory(typeof(TextBlock));
         if (!number)
         {
-            col.DisplayMemberBinding = new Binding(path);
+            // 列より長い文字は「…」で切り、指を置くと全部を出す(列の幅は見出しの右端で変えられる)
+            f.SetBinding(TextBlock.TextProperty, new Binding(path));
+            f.SetBinding(FrameworkElement.ToolTipProperty, new Binding(path));
+            f.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis);
+            col.CellTemplate = new DataTemplate { VisualTree = f };
             return col;
         }
-        var f = new FrameworkElementFactory(typeof(TextBlock));
         f.SetBinding(TextBlock.TextProperty, new Binding(path));
         f.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Right);
         f.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 12, 0));

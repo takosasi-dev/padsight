@@ -12,7 +12,7 @@ namespace PadSight.App.Main;
 
 public sealed class SettingsTab : UserControl
 {
-    readonly StackPanel _stack = new() { MaxWidth = 980 };
+    readonly StackPanel _stack = new();
     StackPanel _cur = null!; // 今作っている区切りの箱の中身
     int _capturing;
     string _mapNote = "";
@@ -20,7 +20,7 @@ public sealed class SettingsTab : UserControl
 
     public SettingsTab()
     {
-        Content = Ui.Scroll(_stack);
+        Content = Ui.Scroll(Ui.LeftCapped(_stack, 980));
         Build();
     }
 
