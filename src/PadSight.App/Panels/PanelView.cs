@@ -39,7 +39,7 @@ public abstract class PanelView : UserControl
     /// <summary>未接続・つなぎ直し中は中身を 30% にして中央に文字を出す(画面設計書 §3)。</summary>
     protected void ShowStatus(string? text)
     {
-        Canvas.Opacity = text is null ? 1 : 0.3;
+        Canvas.Opacity = text is null ? 1 : 0.6; // 仕様は 30% だが、薄すぎて絵が読めなかった(2026-11-17)
         StatusText.Text = text ?? "";
         StatusText.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
     }

@@ -58,6 +58,12 @@ public sealed class PanelsTab : UserControl
         string name = Selected;
         var p = s.Panels[name];
         var stack = new StackPanel();
+        stack.Children.Add(Ui.Horizontal(Ui.Button("全部のパネルを見やすい設定にする(不透明度 100%・背景 85%)", () =>
+        {
+            foreach (var ps in s.Panels.Values) { ps.Opacity = 100; ps.BackgroundOpacity = 85; }
+            Changed();
+            Build();
+        })));
         stack.Children.Add(Ui.Check("表示する", p.Visible, v => { p.Visible = v; Changed(); }));
         stack.Children.Add(Ui.Slider("大きさ(%)", 50, 300, 10, p.Scale, "0", v => { p.Scale = (int)v; Changed(); }));
         stack.Children.Add(Ui.Slider("不透明度(%)", 20, 100, 1, p.Opacity, "0", v => { p.Opacity = (int)v; Changed(); }));

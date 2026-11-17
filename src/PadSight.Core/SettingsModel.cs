@@ -11,8 +11,8 @@ public sealed class PanelSettings
 {
     public bool Visible { get; set; } = true;
     public int Scale { get; set; } = 100;
-    public int Opacity { get; set; } = 90;
-    public int BackgroundOpacity { get; set; } = 75; // 2026-11-17 に見づらいとの声で 40 から上げた
+    public int Opacity { get; set; } = 100; // 2026-11-17 に見づらいとの声で 90 から上げた
+    public int BackgroundOpacity { get; set; } = 85; // 2026-11-17 に見づらいとの声で 40 から上げた
     public string? Monitor { get; set; }
     public double? X { get; set; }
     public double? Y { get; set; }
@@ -84,8 +84,8 @@ public sealed class Settings
             string b = $"overlay.panels.{n}.";
             p.Visible = r.Bool(b + "visible", true);
             p.Scale = r.Int(b + "scale", 50, 300, 100, 10);
-            p.Opacity = r.Int(b + "opacity", 20, 100, 90);
-            p.BackgroundOpacity = r.Int(b + "background_opacity", 0, 100, 75);
+            p.Opacity = r.Int(b + "opacity", 20, 100, 100);
+            p.BackgroundOpacity = r.Int(b + "background_opacity", 0, 100, 85);
             p.Monitor = r.NullableStr(b + "monitor", _ => true);
             p.X = r.NullableDouble(b + "x");
             p.Y = r.NullableDouble(b + "y");

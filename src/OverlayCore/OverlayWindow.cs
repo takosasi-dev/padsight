@@ -49,6 +49,8 @@ public class OverlayWindow : Window
         _panel = new Border
         {
             CornerRadius = new CornerRadius(8),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(90, 255, 255, 255)), // 暗い画面の上でもパネルの範囲が分かるように
+            BorderThickness = new Thickness(1),
             Child = content,
             LayoutTransform = _scale,
         };
