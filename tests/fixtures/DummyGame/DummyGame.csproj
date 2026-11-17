@@ -1,0 +1,12 @@
+﻿<!-- DummyGame: ボーダーレスの全画面でクリックの回数を出すだけの WPF(重ねる窓の試験で使うゲームの代わり)。 -->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+</Project>

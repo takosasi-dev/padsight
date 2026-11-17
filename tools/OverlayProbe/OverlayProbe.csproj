@@ -1,0 +1,13 @@
+﻿<!-- OverlayProbe: 仕様書 §9.10.1 の重ねる窓を 1 枚出すだけの WPF(Phase 0 の確かめ用)。 -->
+<!-- Win32 の関数の宣言は、このプロジェクトでは Win32Window.cs にだけ書く(INV-11)。 -->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+</Project>

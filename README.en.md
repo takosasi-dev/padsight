@@ -1,0 +1,87 @@
+# PadSight
+
+[日本語](README.md)
+
+A Windows tray app that shows your gamepad input in four small panels overlaid on top of your game.
+It only reads the pad. It never sends anything to the pad or to the game.
+
+The user interface is in Japanese only.
+
+![Four panels (pad view, input history, sticks, stats)](docs/images/panels.png)
+
+## Features
+
+- **Pad view**: pressed buttons, D-pad, stick position and click, and trigger travel, drawn as a pad. Xbox, PlayStation, Switch Pro, Joy-Con pair, arcade stick and generic layouts; chosen automatically from the pad type
+- **Input history**: direction (numpad notation) and pressed buttons, one row per change, newest first, with each row's length in frames (60 / 120 / 144 / 240) or milliseconds
+- **Sticks**: left and right stick position, trail and values, plus trigger values. The main window can measure the resting drift and the outer range shape of a stick
+- **Stats**: session length, input count, inputs in the last 60 seconds and per-button counts. Per-session totals are kept and can be viewed by period or exported as CSV
+- Panels let clicks through to the window below and never take focus. Hotkeys hide all panels, enter the arrange mode, and clear the history (defaults Ctrl+Alt+G / J / H)
+- Lives in the system tray and can start at sign-in
+
+![Main window (home)](docs/images/home.png)
+
+## What it does and does not do
+
+It does:
+
+- Read the input of connected gamepads and show it in small panels at the edge of the screen (read-only)
+- Overlay the panels on top of the game, while clicks still reach the game and the game keeps focus
+- Keep the length and input counts of each session on this PC
+
+It does not:
+
+- Send anything to the pad (rumble, lights, mode switches)
+- Touch the game's process, memory or windows, or draw inside the game (it only shows its own transparent windows)
+- Read keyboard or mouse input (only the registered hotkeys)
+- Store the order or timing of inputs, use the network, or require administrator rights
+
+## Please read before use
+
+- **No promise about bans.** PadSight does not touch game processes or memory, but a transparent topmost window looks the same as what external cheats use. PadSight cannot promise that games with anti-cheat will not flag it. Do not use it with games you are unsure about, and check each game's terms
+- **It does not appear over exclusive-fullscreen games.** Play in borderless or windowed mode
+- **Do not launch it from Steam.** Steam's virtual pads may show up instead of your real pad
+- **SmartScreen may warn you.** The exe is not code-signed
+- Xbox, PlayStation, DualShock, DualSense, Nintendo Switch and Joy-Con are trademarks of their respective owners. PadSight is not affiliated with them. The pad drawings are original shapes; no manufacturer logos or images are used
+
+## Requirements
+
+- Windows 11 (x64)
+- Gamepads: Xbox-family (XInput), PlayStation (DualShock 4, DualSense), Switch (Pro Controller, Joy-Con) and generic pads, read through [SDL3](https://libsdl.org/)
+- To build from source: .NET 10 SDK
+
+## Build and run
+
+```
+git clone https://github.com/takosasi-dev/padsight.git
+cd padsight
+dotnet build PadSight.slnx
+dotnet test tests/PadSight.Tests/PadSight.Tests.csproj
+dotnet run --project src/PadSight.App
+```
+
+`tools\publish.ps1` builds a single-file exe and a zip into `dist\`.
+
+```
+powershell -ExecutionPolicy Bypass -File tools\publish.ps1
+```
+
+Prebuilt binaries will be published on [Releases](https://github.com/takosasi-dev/padsight/releases) after testing with real pads.
+
+Other tools:
+
+| Item | Purpose |
+|---|---|
+| `tools\PadProbe` | Prints pads and input events to the console (`PadProbe hints` / `list --config A` / `watch --config A --seconds 60`) |
+| `tools\OverlayProbe` | Shows a single overlay window to test click-through |
+| `tests\fixtures\DummyGame` | A full-screen test window that only counts clicks |
+| `tools\check.ps1` | Searches the source for APIs that would touch other processes, the network or write to pads |
+
+Data lives in `%LOCALAPPDATA%\PadSight\` (settings, session totals, logs). To add controller mappings, place `gamecontrollerdb.txt` from [SDL_GameControllerDB](https://github.com/mdqinc/SDL_GameControllerDB) in the same folder (up to 1 MB).
+
+## Status
+
+v0.1.0 (in development). All features are in place and the unit tests (195) pass, but **it has not yet been tested with real pads**. The default input backend, the check that pads are left unchanged, and performance measurements are still to be done on real hardware.
+
+## License
+
+[MIT](LICENSE). Third-party licenses are in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) (SDL and SDL3-CS: zlib; H.NotifyIcon: MIT).

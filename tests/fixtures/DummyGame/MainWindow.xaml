@@ -1,0 +1,17 @@
+﻿<!-- DummyGame: ボーダーレスの全画面の窓を 1 枚出す、試験用のゲームの代わり(仕様書 §9.1)。 -->
+<!-- クリックの回数を大きく出し、フォーカスの有無と終わり方を下に出す。 -->
+<Window x:Class="DummyGame.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="DummyGame"
+        WindowStyle="None" WindowState="Maximized" ResizeMode="NoResize"
+        Background="#FF101418">
+    <Grid>
+        <TextBlock x:Name="CountText" Text="0" Foreground="White" FontSize="280" FontWeight="Bold"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,48">
+            <TextBlock x:Name="FocusText" Foreground="#FFB0BAC4" FontSize="32" HorizontalAlignment="Center" />
+            <TextBlock Text="Esc で終了" Foreground="#FF808A94" FontSize="24" HorizontalAlignment="Center" Margin="0,8,0,0" />
+        </StackPanel>
+    </Grid>
+</Window>

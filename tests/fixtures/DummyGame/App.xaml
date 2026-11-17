@@ -1,0 +1,6 @@
+﻿<!-- DummyGame の入口。全画面の窓を 1 枚出すだけ。 -->
+<Application x:Class="DummyGame.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+</Application>

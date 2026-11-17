@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>PadSight</AssemblyName>
+    <RootNamespace>PadSight.App</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PadSight.Core\PadSight.Core.csproj" />
+    <ProjectReference Include="..\PadSight.Input\PadSight.Input.csproj" />
+    <ProjectReference Include="..\OverlayCore\OverlayCore.csproj" />
+    <PackageReference Include="H.NotifyIcon.Wpf" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" LogicalName="THIRD-PARTY-NOTICES.md" />
+  </ItemGroup>
+</Project>

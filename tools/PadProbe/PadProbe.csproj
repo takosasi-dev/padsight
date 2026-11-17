@@ -1,0 +1,21 @@
+﻿<!-- PadProbe: SDL でパッドの一覧とイベントを出すコンソール(仕様書 §9.13)。 -->
+<!-- ヒントの設定は src\PadSight.Input\SdlHints.cs をリンクして使い回す(Input への参照は持たない)。 -->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SDL3-CS" />
+    <PackageReference Include="SDL3-CS.Windows" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\PadSight.Input\SdlHints.cs" Link="SdlHints.cs" />
+  </ItemGroup>
+
+</Project>

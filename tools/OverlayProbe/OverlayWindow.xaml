@@ -1,0 +1,16 @@
+<!-- OverlayProbe の重ねる窓(仕様書 §9.10.1 の設定そのまま)。 -->
+<!-- 半透明の黒い角丸の板に、名前と時計だけを出す。入力を受ける部品は置かない。 -->
+<Window x:Class="OverlayProbe.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="OverlayProbe"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False" Topmost="True" ShowActivated="False" ResizeMode="NoResize"
+        Width="360" Height="240" Left="100" Top="100">
+    <Border CornerRadius="16" Background="#99000000">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+            <TextBlock Text="OverlayProbe" Foreground="White" FontSize="28" HorizontalAlignment="Center" />
+            <TextBlock x:Name="ClockText" Foreground="White" FontSize="44" HorizontalAlignment="Center" Margin="0,8,0,0" />
+        </StackPanel>
+    </Border>
+</Window>
