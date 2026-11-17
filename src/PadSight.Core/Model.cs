@@ -97,6 +97,8 @@ public sealed record PadSnapshot(
     public bool DuplicateWarning { get; init; }
     /// <summary>gamecontrollerdb.txt を読んだ件数。null は置いていない、-1 は読めなかった。</summary>
     public int? MappingCount { get; init; }
+    /// <summary>ボタンの検査の数(FR-45)。鍵は InstanceId → ボタン。押したことのあるボタンだけ。</summary>
+    public IReadOnlyDictionary<uint, IReadOnlyDictionary<PadButton, ChatterCount>> Chatter { get; init; } = new Dictionary<uint, IReadOnlyDictionary<PadButton, ChatterCount>>();
     public bool SessionActive => Session.Active;
 
     public static PadSnapshot Empty { get; } = new(0, null, false, new HashSet<PadButton>(), default, default, 0, 0, [],

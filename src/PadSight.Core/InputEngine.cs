@@ -22,6 +22,7 @@ public sealed class InputEngine
     readonly DirectionResolver _direction = new();
     readonly HistoryBuilder _history = new();
     readonly StickTrail _leftTrail = new(), _rightTrail = new();
+    readonly ChatterCounter _chatter = new();
     readonly SessionTracker _session;
     readonly List<SessionRecord> _finalized = [];
     EngineConfig _config;
@@ -90,6 +91,8 @@ public sealed class InputEngine
         }
         if (r.InputKey is not null)
             _session.OnInput(e.TimestampNs, r.InputKey, pad.Info);
+        if (e is ButtonChanged bc && pad.Info.IsMapped)
+            _chatter.Apply(bc.InstanceId, bc.Button, bc.Down, bc.TimestampNs);
         if (r.ButtonPress)
             OnPress(pad.Info.InstanceId, e.TimestampNs);
         if (pad.Info.InstanceId == _selector.Selected && e is AxisChanged ax)
@@ -125,6 +128,9 @@ public sealed class InputEngine
     public void Pin(string guid) => Configure(_config with { SelectionMode = "pinned", PinnedGuid = guid });
 
     public void ClearHistory() => _history.Clear();
+
+    /// <summary>ボタンの検査の数を全部のパッドで 0 に戻す(FR-45)。</summary>
+    public void ResetChatter() => _chatter.Reset();
 
     /// <summary>手で区切る(FR-28)・終了するときに、今のセッションを確定する。</summary>
     public void CloseSession() => AddFinalized(_session.Close());
@@ -163,6 +169,7 @@ public sealed class InputEngine
             LastPressNs = _lastPressNs,
             DuplicateWarning = _duplicate,
             MappingCount = mappingCount,
+            Chatter = _chatter.Snapshot(),
         };
     }
 
