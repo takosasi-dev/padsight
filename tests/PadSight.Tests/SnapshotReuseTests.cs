@@ -101,6 +101,21 @@ public class SnapshotReuseTests
     }
 
     [Fact]
+    public void MergedPress_ReplacesHistory_OldSnapshotKeepsUnmergedRow()
+    {
+        var (e, _) = Start();
+        e.Down(1 * T.S, PadButton.South);
+        var a = e.Snapshot(1 * T.S + 1 * T.Ms, 0);
+        e.Down(1 * T.S + 10 * T.Ms, PadButton.East); // 2 フレームの窓の中。一番上の行にまとまる
+        var b = e.Snapshot(1 * T.S + 11 * T.Ms, 0);
+        Assert.NotSame(a.History, b.History);
+        Assert.Equal(a.History.Count, b.History.Count);
+        Assert.Equal(["South", "East"], b.History[0].NewlyPressed);
+        Assert.Equal(["South"], a.History[0].NewlyPressed);
+        Assert.Null(a.History[0].MergeGapNs);
+    }
+
+    [Fact]
     public void ClearHistory_EmptiesNewSnapshot_OldKeepsRows()
     {
         var (e, _) = Start();
