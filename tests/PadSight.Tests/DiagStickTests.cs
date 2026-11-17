@@ -157,6 +157,25 @@ public class DiagStickTests
     }
 
     [Fact]
+    public void Resolution_CoarseWinsOverFewLevels()
+    {
+        // 8 ビットのパッドをゆっくり小さく動かすと、出る値も 12 個ほどしかない。粗さの方を言う
+        var t = new ResolutionTest(false);
+        t.Start();
+        const float step = 257f / 32767f;
+        for (int i = 0; i < 40; i++) t.Feed(At(i * 50, (38 + i % 12) * step));
+        t.Finish();
+        Assert.Equal(12, t.Result.DistinctLevels);
+        Assert.Contains("粗め", t.Result.Verdict);
+        // 刻みが細かくても値の数が少なければ、動きが足りない
+        var u = new ResolutionTest(false);
+        u.Start();
+        for (int i = 0; i < 40; i++) u.Feed(At(i * 50, 0.3f + (i % 5) * 0.0001f));
+        u.Finish();
+        Assert.Contains("動きが小さすぎて", u.Result.Verdict);
+    }
+
+    [Fact]
     public void Resolution_FinishWithoutAnySample_NotComplete()
     {
         var t = new ResolutionTest(false);

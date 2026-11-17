@@ -10,8 +10,9 @@ public sealed record ResolutionResult(bool Complete, float MinStep, float NoiseL
     /// <summary>-1〜1 を最小の刻みで割った段の数の目安。測れていなければ 0。</summary>
     public int StepsEstimate => MinStep > 0 ? (int)Math.Round(2.0 / MinStep) : 0;
 
-    public string Verdict => DistinctLevels < 20 ? "動きが小さすぎて、測れていない可能性があります。もう少し動かしてください"
-        : MinStep >= CoarseStep ? $"刻みが粗めの可能性があります(約 {StepsEstimate} 段相当)。ゆっくりした操作がかくつく場合があります"
+    /// <summary>判定の文(断定しない)。粗さを先に見る(粗いパッドは、ゆっくり動かすと出る値の数も少ないため)。</summary>
+    public string Verdict => MinStep >= CoarseStep ? $"刻みが粗めの可能性があります(約 {StepsEstimate} 段相当)。ゆっくりした操作がかくつく場合があります"
+        : DistinctLevels < 20 ? "動きが小さすぎて、測れていない可能性があります。もう少し動かしてください"
         : "細かい刻みで値が出ています(目安)";
 }
 

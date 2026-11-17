@@ -188,14 +188,3 @@ sealed class PlaceholderPage(string title) : IDiagPage
     public void Render(DiagContext c) { }
     public void Cancel() { }
 }
-
-/// <summary>スティックのページ。今は前からのスティック診断(ボタンの検査・トリガーの範囲を含む)をそのまま載せている。</summary>
-sealed class StickPage : IDiagPage
-{
-    readonly DiagTab _old = new();
-    public string Title => "スティック";
-    public FrameworkElement View => _old;
-    public bool WantsSamples => false;
-    public void Render(DiagContext c) => _old.Render(c.S);
-    public void Cancel() => _old.Cancel();
-}
