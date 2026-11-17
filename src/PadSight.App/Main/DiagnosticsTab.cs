@@ -64,9 +64,9 @@ public sealed class DiagnosticsTab : UserControl
         [
             new Diag.ButtonsPage(),
             new StickPage(),
-            new PlaceholderPage("トリガー"),
-            new PlaceholderPage("振動"),
-            new PlaceholderPage("放置監視"),
+            new Diag.TriggerPage(),
+            new Diag.VibrationPage(),
+            new Diag.IdlePage(),
             new HistoryPage(),
         ];
         foreach (var p in Pages)
