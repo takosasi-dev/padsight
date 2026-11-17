@@ -16,7 +16,7 @@ public sealed class PadSelector
         if (Mode == "pinned" || Selected == from.Info.InstanceId)
             return;
         if (Selected is not uint cur || !pads.TryGetValue(cur, out var curState)
-            || !curState.HasOperated || ns - curState.LastOperationNs >= SwitchAfter)
+            || !curState.HasOperated || Values.Since(ns, curState.LastOperationNs) >= SwitchAfter)
             Selected = from.Info.InstanceId;
     }
 

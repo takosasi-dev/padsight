@@ -156,6 +156,13 @@ public sealed class SettingsTab : UserControl
             app.UnregisterHotkeys(); // 受け付けの間は、自分の組み合わせも窓に届くようにする
             _onCaptured = combo =>
             {
+                var s = app.Settings;
+                var used = new[] { s.HotkeyToggle, s.HotkeyArrange, s.HotkeyClearHistory, s.HotkeyPauseHistory };
+                if (combo is not null && combo != get() && used.Contains(combo))
+                {
+                    MessageBox.Show(Window.GetWindow(this), $"{combo} はほかの操作で使っています。別の組み合わせを選んでください", "PadSight");
+                    combo = null; // 2 つ目の登録が失敗して「他のアプリが使っています」と出るのを防ぐ
+                }
                 if (combo is not null) set(combo);
                 app.SaveSettings();
                 app.RegisterHotkeys();
@@ -188,6 +195,13 @@ public sealed class SettingsTab : UserControl
             Finish(combo);
         else if (_captureText is not null && Keyboard.Modifiers == ModifierKeys.None && key is not (Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift))
             _captureText.Text = "修飾キー(Ctrl・Alt・Shift)と一緒に押してください";
+    }
+
+    /// <summary>窓を閉じた・タブを離れたときに、受け付けを取り消してホットキーを登録し直す。</summary>
+    public void CancelCapture()
+    {
+        if (CapturingHotkey)
+            Finish(null);
     }
 
     void Finish(string? combo)

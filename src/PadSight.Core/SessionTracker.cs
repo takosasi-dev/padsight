@@ -55,7 +55,7 @@ public sealed class SessionTracker
     public SessionRecord? OnOperation(ulong ns)
     {
         SessionRecord? closed = null;
-        if (_active && (ns - _lastOpNs >= IdleNs || ns - _startNs >= Max24h))
+        if (_active && (Values.Since(ns, _lastOpNs) >= IdleNs || Values.Since(ns, _startNs) >= Max24h))
             closed = Close();
         if (!_active)
         {
@@ -73,7 +73,7 @@ public sealed class SessionTracker
             _peak1 = 0;
             _perGuid.Clear();
         }
-        _lastOpNs = ns;
+        _lastOpNs = Math.Max(_lastOpNs, ns);
         return closed;
     }
 
@@ -95,7 +95,7 @@ public sealed class SessionTracker
         }
         // FR-37: この入力から 1 秒前までの数の最大
         _recent1.Enqueue(ns);
-        while (ns - _recent1.Peek() >= Values.NsPerSecond)
+        while (Values.Since(ns, _recent1.Peek()) >= Values.NsPerSecond)
             _recent1.Dequeue();
         _peak1 = Math.Max(_peak1, _recent1.Count);
         _recent.Enqueue(ns);
@@ -107,7 +107,7 @@ public sealed class SessionTracker
     {
         if (!_active)
             return null;
-        if (nowNs - _lastOpNs >= IdleNs || nowNs - _startNs >= Max24h)
+        if (Values.Since(nowNs, _lastOpNs) >= IdleNs || Values.Since(nowNs, _startNs) >= Max24h)
             return Close();
         Recount(nowNs);
         return null;
@@ -138,7 +138,7 @@ public sealed class SessionTracker
 
     void Recount(ulong nowNs)
     {
-        while (_recent.Count > 0 && nowNs - _recent.Peek() >= Window60)
+        while (_recent.Count > 0 && Values.Since(nowNs, _recent.Peek()) >= Window60)
             _recent.Dequeue();
         _last60 = _recent.Count;
         _peak = Math.Max(_peak, _last60);

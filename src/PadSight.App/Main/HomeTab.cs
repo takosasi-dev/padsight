@@ -137,8 +137,9 @@ public sealed class HomeTab : UserControl
     {
         if (_checkEnd is not DateTime end)
             return;
-        if (!active)
-            _checkCount += s.PressCounter - _checkCounter;
+        // デモのスナップショットはデモ用の数を持つので、デモの間は数えない(数の飛びも拾わない)
+        if (!active && !App.Current.DemoRunning && s.Pad?.InstanceId != DemoScript.Id)
+            _checkCount += Math.Max(0, s.PressCounter - _checkCounter);
         _checkCounter = s.PressCounter;
         double left = (end - DateTime.UtcNow).TotalSeconds;
         if (left > 0)

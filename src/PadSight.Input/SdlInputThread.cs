@@ -37,6 +37,7 @@ public sealed class SdlInputThread
     volatile bool _stop;
     volatile bool _sdlReady; // 真の間だけ、Post で SDL の待ちを起こす
     InputOptions _options;
+    string? _initError;
     InputOptions? _reconnectTo;
     int? _mappingCount;
     // FR-40: デモは本物とは別の InputEngine で動かし、確定した集計は捨てる。時計は SDL に頼らない(初期化に失敗していても流せる)
@@ -122,7 +123,11 @@ public sealed class SdlInputThread
             if (_reconnectTo is { } next)
             {
                 _reconnectTo = null;
-                Shutdown(keepSession: true);
+                if (ok)
+                    Shutdown(keepSession: true);
+                else // SDL が動いていないので止める物が無い(SDL を呼ぶと、DLL が無いときに落ちる)
+                    foreach (var id in _engine.Pads.Keys.ToList())
+                        _engine.DropPad(id);
                 _publish(_engine.Snapshot(_time.Map(0), Stopwatch.GetTimestamp(), InputStatus.Reconnecting));
                 _options = next;
                 ok = Init();
@@ -151,6 +156,12 @@ public sealed class SdlInputThread
             {
                 FlushFinalized();
                 if (_demo is not null) StepDemo();
+                else if (dirty)
+                {
+                    // デモを止めた後などに、最後のデモの絵が残らないように失敗の状態を出し直す
+                    _publish(_engine.Snapshot(_time.Map(0), Stopwatch.GetTimestamp(), InputStatus.Failed, _initError));
+                    dirty = false;
+                }
                 _wake.WaitOne(_demo is null ? 250 : DemoStepMs);
                 continue;
             }
@@ -214,6 +225,7 @@ public sealed class SdlInputThread
         }
         if (!inited)
         {
+            _initError = err;
             _log("SDL の初期化に失敗: " + err);
             _publish(_engine.Snapshot(_time.Map(0), Stopwatch.GetTimestamp(), InputStatus.Failed, err));
             return false;

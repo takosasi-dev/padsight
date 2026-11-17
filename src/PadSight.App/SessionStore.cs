@@ -14,11 +14,19 @@ public sealed class SessionStore : IDisposable
     readonly BlockingCollection<Action> _queue = [];
     readonly Thread _thread;
     readonly List<SessionRecord> _pending = [];
+    readonly List<SessionRecord> _padPending = []; // pads.json に足せなかった物。次に書くときにもう一度足す
 
     public SessionStore(string dataDir)
     {
         _dir = dataDir;
-        _thread = new Thread(() => { foreach (var a in _queue.GetConsumingEnumerable()) a(); }) { IsBackground = true, Name = "SessionStore" };
+        _thread = new Thread(() =>
+        {
+            foreach (var a in _queue.GetConsumingEnumerable())
+            {
+                try { a(); }
+                catch (Exception ex) { AppLog.Error("統計の保存", ex); } // 1 つの失敗で書き込みのスレッド(とアプリ)を止めない
+            }
+        }) { IsBackground = true, Name = "SessionStore" };
         _thread.Start();
     }
 
@@ -36,11 +44,23 @@ public sealed class SessionStore : IDisposable
     {
         if (!File.Exists(CurrentPath))
             return;
-        var rec = SessionJson.Parse(File.ReadAllText(CurrentPath, Encoding.UTF8));
-        if (rec is { DurationSeconds: > 0 })
-            Append([rec with { LastOperationUtc = null }]);
+        string text;
+        try { text = File.ReadAllText(CurrentPath, Encoding.UTF8); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Error("current_session.json の読み込み", ex); // 消さずに残し、次の起動でもう一度戻す
+            return;
+        }
+        var rec = SessionJson.Parse(text);
+        // 確定の書き込みの後に current_session.json を消せなかったときは、同じ ID がもう sessions.jsonl にある
+        if (rec is { DurationSeconds: > 0 } && !ReadAll().Records.Any(r => r.Id == rec.Id))
+        {
+            Append([rec with { LastOperationUtc = null }]); // 書けたら Append が current_session.json を消す。書けなければ残す(E-15)
+            AppLog.Write("前回のセッションを確定した");
+            return;
+        }
         _queue.Add(() => TryIo(() => File.Delete(CurrentPath)));
-        AppLog.Write(rec is null ? "読めない current_session.json を消した" : "前回のセッションを確定した");
+        AppLog.Write(rec is null ? "読めない current_session.json を消した" : "前回のセッションは確定済みだったので、current_session.json を消した");
     }
 
     public void Append(IReadOnlyList<SessionRecord> records)
@@ -52,7 +72,7 @@ public sealed class SessionStore : IDisposable
             bool ok = TryIo(() => File.AppendAllText(SessionsPath, text, Utf8));
             if (ok)
             {
-                AddToPadTotals(_pending);
+                ok = AddToPadTotals(_pending);
                 _pending.Clear();
                 TryIo(() => File.Delete(CurrentPath));
                 Appended?.Invoke();
@@ -63,29 +83,45 @@ public sealed class SessionStore : IDisposable
 
     string PadsPath => Path.Combine(_dir, "pads.json");
 
-    /// <summary>FR-38: 書けたセッションの GUID ごとの回数を pads.json に足す。読めなければ名前を変えて空から始める。</summary>
-    void AddToPadTotals(IEnumerable<SessionRecord> records)
+    /// <summary>FR-38: 書けたセッションの GUID ごとの回数を pads.json に足す。中身が壊れていれば名前を変えて空から始める。
+    /// 一時的に読めない・書けないときは足さずに持っておき、次に書くときにもう一度足す。足せたら真。</summary>
+    bool AddToPadTotals(IEnumerable<SessionRecord> records)
     {
-        var totals = ReadPadTotals(renameBroken: true);
-        foreach (var r in records)
+        _padPending.AddRange(records);
+        if (ReadPadTotalsCore(renameBroken: true) is not { } totals)
+            return false;
+        foreach (var r in _padPending)
             totals.Add(r);
-        TryIo(() =>
+        bool ok = TryIo(() =>
         {
             File.WriteAllText(PadsPath + ".tmp", totals.ToJson(TimeZoneInfo.Local), Utf8);
             File.Move(PadsPath + ".tmp", PadsPath, overwrite: true);
         });
+        if (ok)
+            _padPending.Clear();
+        return ok;
     }
 
-    /// <summary>パッドごとの通算を読む。無ければ空。</summary>
-    public PadTotals ReadPadTotals(bool renameBroken = false)
+    /// <summary>パッドごとの通算を読む。無い・読めないときは空。</summary>
+    public PadTotals ReadPadTotals() => ReadPadTotalsCore(renameBroken: false) ?? new PadTotals();
+
+    /// <summary>読めなければ(ほかのプログラムが開いているなど)null。中身が壊れていれば空(renameBroken なら名前を変える)。</summary>
+    PadTotals? ReadPadTotalsCore(bool renameBroken)
     {
         if (!File.Exists(PadsPath))
             return new PadTotals();
+        string text;
+        try { text = File.ReadAllText(PadsPath, Encoding.UTF8); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Error("pads.json の読み込み", ex);
+            return null;
+        }
         try
         {
-            return PadTotals.Parse(File.ReadAllText(PadsPath, Encoding.UTF8));
+            return PadTotals.Parse(text);
         }
-        catch (Exception ex) when (ex is System.Text.Json.JsonException or FormatException or InvalidOperationException or IOException)
+        catch (Exception ex) // 形の違う JSON は、型の違い・null・同じキーなど、いろいろな例外になる
         {
             AppLog.Write("pads.json を読めなかった: " + ex.Message);
             if (renameBroken)
@@ -117,7 +153,7 @@ public sealed class SessionStore : IDisposable
         {
             lines = File.ReadAllLines(SessionsPath, Encoding.UTF8);
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             AppLog.Error("sessions.jsonl の読み込み", ex);
             return (list, 0);

@@ -207,7 +207,8 @@ public sealed class InputEngine
     {
         _pressCounter++;
         // E-4: 別のパッドの押下が 50 ミリ秒以内にそろうことが 5 回続いたら知らせる
-        if (_lastPressPad is uint prev && prev != pad && ns - _lastPressNs <= DuplicateWindow && !_lastPaired)
+        // 時刻が少し戻った押下も、差の大きさでそろいを見る
+        if (_lastPressPad is uint prev && prev != pad && Math.Max(Values.Since(ns, _lastPressNs), Values.Since(_lastPressNs, ns)) <= DuplicateWindow && !_lastPaired)
         {
             _lastPaired = true;
             if (++_pairStreak >= 5 && _config.SelectionMode == "last_used")
@@ -220,7 +221,7 @@ public sealed class InputEngine
             _lastPaired = false;
         }
         _lastPressPad = pad;
-        _lastPressNs = ns;
+        _lastPressNs = Math.Max(_lastPressNs, ns);
     }
 
     void AddFinalized(SessionRecord? r)

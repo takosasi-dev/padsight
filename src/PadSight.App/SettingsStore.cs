@@ -32,8 +32,9 @@ public sealed class SettingsStore(string dataDir)
             ReadOnly = newer;
             return (s, LoadResult.Loaded);
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException or FormatException)
         {
+            // ArgumentException は同じキーが 2 つある JSON(.NET 10 の JsonNode が読むときに出す)
             AppLog.Write("settings.json を読めなかった: " + ex.Message);
             File.Move(Path, $"{Path}.broken-{utcNow.ToLocalTime():yyyyMMdd-HHmmss}");
             return (new Settings(), LoadResult.Broken);
@@ -81,7 +82,7 @@ public sealed class SettingsStore(string dataDir)
     public static Settings? ReadBackup(string file)
     {
         try { return Settings.Parse(File.ReadAllText(file, Encoding.UTF8), out _, out _); }
-        catch (JsonException ex) { AppLog.Write("写しを読めなかった: " + ex.Message); return null; }
+        catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException or FormatException) { AppLog.Write("写しを読めなかった: " + ex.Message); return null; }
         catch (IOException ex) { AppLog.Write("写しを読めなかった: " + ex.Message); return null; }
     }
 }

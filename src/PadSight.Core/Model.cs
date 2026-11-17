@@ -117,6 +117,9 @@ public static class Values
     public const ulong NsPerSecond = 1_000_000_000UL;
     public const ulong NsPerMs = 1_000_000UL;
 
+    /// <summary>earlier から now までの ns。別のスレッドから積まれたイベントは時刻が少し戻ることがあるので、戻ったら 0。</summary>
+    public static ulong Since(ulong now, ulong earlier) => now > earlier ? now - earlier : 0;
+
     public static float Axis(short raw) => MathF.Max(-1f, raw / 32767f);
     public static float Trigger(short raw) => Math.Clamp(raw / 32767f, 0f, 1f);
 

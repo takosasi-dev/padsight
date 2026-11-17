@@ -46,6 +46,7 @@ public sealed class MainWindow : Window
             if (e.Source != _tabs) return;
             if (_tabs.SelectedItem is TabItem { Content: StatsTab st }) st.Reload();
             if (_tabs.SelectedItem is not TabItem { Content: MeasureTab }) _measure.Cancel(); // 描画が止まると時間を測れないので、離れたら止める
+            if (_tabs.SelectedItem is not TabItem { Content: SettingsTab }) _settings.CancelCapture(); // 受け付けたまま離れると、Ctrl+数字がホットキーになってしまう
         };
 
         _state.HorizontalAlignment = HorizontalAlignment.Right;
@@ -64,7 +65,7 @@ public sealed class MainWindow : Window
         RebuildBanners();
         UpdateState();
         PreviewKeyDown += OnKey;
-        Closing += (_, e) => { e.Cancel = true; _diag.Cancel(); _measure.Cancel(); Hide(); };
+        Closing += (_, e) => { e.Cancel = true; _diag.Cancel(); _measure.Cancel(); _settings.CancelCapture(); Hide(); };
     }
 
     /// <summary>タブを選ぶ(0 から。2 はスティック診断)。帯のボタンから使う。</summary>

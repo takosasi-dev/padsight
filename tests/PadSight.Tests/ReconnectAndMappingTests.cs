@@ -80,3 +80,45 @@ public class ReconnectAndMappingTests
         Assert.Equal(MappingDb.Check(text), MappingDb.Check(kept));
     }
 }
+
+/// <summary>別のスレッドから積まれたイベントの時刻が少し戻っても、セッションが割れず、選び直しの 2 秒も守られる(点検で見つかった不具合)。</summary>
+public class BackwardTimestampTests
+{
+    [Fact]
+    public void SlightlyEarlierEvent_DoesNotSplitSession()
+    {
+        var e = T.Engine(new FakeClock());
+        e.Apply(new PadAdded(T.S, 1, T.Xbox()));
+        e.Apply(new PadAdded(T.S, 2, T.Xbox(2, "guid-b", "B")));
+        e.Tap(10 * T.S, PadButton.South, 1);
+        e.Tap(20 * T.S, PadButton.South, 1);
+        e.Tap(20 * T.S - T.Ms, PadButton.South, 2); // 1 ミリ秒前の時刻で届いた
+        e.Tap(30 * T.S, PadButton.South, 1);
+        e.Tick(31 * T.S);
+        Assert.True(e.SessionActive);
+        Assert.Empty(e.TakeFinalized());
+    }
+
+    [Fact]
+    public void TickSlightlyBehindLastOperation_KeepsSession()
+    {
+        var e = T.Engine(new FakeClock());
+        e.Apply(new PadAdded(T.S, 1, T.Xbox()));
+        e.Tap(10 * T.S, PadButton.South);
+        e.Tap(11 * T.S, PadButton.South);
+        e.Tick(11 * T.S - T.Ms); // 最後の操作より 1 ミリ秒前の時刻で区切りを見る
+        Assert.True(e.SessionActive);
+        Assert.Empty(e.TakeFinalized());
+    }
+
+    [Fact]
+    public void SlightlyEarlierEvent_DoesNotSwitchPadImmediately()
+    {
+        var e = T.Engine(new FakeClock());
+        e.Apply(new PadAdded(T.S, 1, T.Xbox()));
+        e.Apply(new PadAdded(T.S, 2, T.Xbox(2, "guid-b", "B")));
+        e.Tap(10 * T.S, PadButton.South, 1);
+        e.Tap(10 * T.S - T.Ms, PadButton.South, 2); // 1 のすぐ後に届いたが時刻は 1 ミリ秒前
+        Assert.Equal(1u, e.SelectedId);
+    }
+}
