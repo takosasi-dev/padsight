@@ -9,9 +9,14 @@ public sealed class HistoryBuilder
 
     readonly List<HistoryRow> _rows = []; // 新しい順
     int _dir = 5;
-    HashSet<string> _pressed = [];
+    readonly HashSet<string> _pressed = [];
 
     public IReadOnlyList<HistoryRow> Rows => _rows;
+
+    IReadOnlyList<HistoryRow>? _copy;
+
+    /// <summary>スナップショットに渡す行の写し。行が変わっていなければ前の写しを返す(写しは変えない。止めた画面がそのまま持つ)。</summary>
+    public IReadOnlyList<HistoryRow> Copy() => _copy ??= [.. _rows];
 
     /// <summary>同時押しをまとめる窓(ns。FR-50)。一番上の行の始まりからこの時間以内(境目を含む)の押下をまとめる。0 はまとめない。</summary>
     public ulong MergeWindowNs { get; set; }
@@ -23,10 +28,18 @@ public sealed class HistoryBuilder
     public static ulong MergeWindowOf(int mergeFrames) => (ulong)Math.Max(0, mergeFrames) * Values.NsPerSecond / 60;
 
     /// <summary>状態を受ける。行が増えたか、一番上の行にまとめたら真。</summary>
-    public bool Update(ulong ns, int direction, IReadOnlyCollection<string> pressed)
+    public bool Update(ulong ns, int direction, IReadOnlyList<string> pressed)
     {
+        // 軸のイベントのたびに呼ばれるので、何も変わらないときは物を作らずに返す
+        if (direction == _dir && !HasNew(pressed))
+        {
+            Remember(pressed); // 離した物があれば忘れる
+            return false;
+        }
         var newly = pressed.Where(k => !_pressed.Contains(k)).ToList();
         bool changed = direction != _dir || newly.Count > 0;
+        if (changed)
+            _copy = null;
         if (changed && direction == _dir && CanMerge(ns, newly))
         {
             // 行は書き換えずに作り直す(スナップショットと止めた画面が前の行をそのまま持っているため)
@@ -49,8 +62,26 @@ public sealed class HistoryBuilder
                 _rows.RemoveAt(_rows.Count - 1);
         }
         _dir = direction;
-        _pressed = [.. pressed];
+        Remember(pressed);
         return changed;
+    }
+
+    bool HasNew(IReadOnlyList<string> pressed)
+    {
+        for (int i = 0; i < pressed.Count; i++)
+        {
+            if (!_pressed.Contains(pressed[i]))
+                return true;
+        }
+        return false;
+    }
+
+    // _pressed はこのクラスの中だけで使い、外へ渡さないので、作り直さずに入れ替える
+    void Remember(IReadOnlyList<string> pressed)
+    {
+        _pressed.Clear();
+        for (int i = 0; i < pressed.Count; i++)
+            _pressed.Add(pressed[i]);
     }
 
     // 方向が変わらずに押された物を、ボタンの押下で始まった一番上の行に足せるか。
@@ -71,7 +102,11 @@ public sealed class HistoryBuilder
     public void SourceChanged() => _noMerge = true;
 
     /// <summary>出ている行とメモリの行を消す(FR-21)。今の方向と押している物は覚えたまま。</summary>
-    public void Clear() => _rows.Clear();
+    public void Clear()
+    {
+        _rows.Clear();
+        _copy = null;
+    }
 
     /// <summary>行の長さを文字列にする。frameBase が 0 ならミリ秒。</summary>
     public static string FormatLength(ulong lengthNs, int frameBase)

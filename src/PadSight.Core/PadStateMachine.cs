@@ -22,6 +22,24 @@ public sealed class PadState(PadInfo info, int order)
     public StickValue Right => StickValue.FromRaw(Axes[(int)PadAxis.RightX], Axes[(int)PadAxis.RightY]);
     public float LeftTrigger => Values.Trigger(Axes[(int)PadAxis.LeftTrigger]);
     public float RightTrigger => Values.Trigger(Axes[(int)PadAxis.RightTrigger]);
+
+    // スナップショットに渡す写し。PadStateMachine.Apply がこのパッドを変えるたびに捨てる(渡した写しは変えない)
+    IReadOnlySet<PadButton>? _pressedCopy;
+    PadLive? _live;
+
+    /// <summary>押しているボタンの写し。ボタンが変わるまで同じ物を返す。</summary>
+    internal IReadOnlySet<PadButton> PressedCopy() => _pressedCopy ??= new HashSet<PadButton>(Pressed);
+
+    /// <summary>このパッドの今の状態の写し。変わるまで同じ物を返す。</summary>
+    internal PadLive Live() => _live ??= new(Info, PressedCopy(), Left, Right, LeftTrigger, RightTrigger,
+        Info.IsMapped ? null : new RawState([.. RawButtons], [.. RawAxes.Select(Values.Axis)], [.. RawHats]));
+
+    internal void Changed(bool buttons)
+    {
+        _live = null;
+        if (buttons)
+            _pressedCopy = null;
+    }
 }
 
 /// <param name="Operation">セッションを続ける操作か</param>
@@ -34,13 +52,48 @@ public sealed class PadStateMachine
     const float StickOperation = 0.25f;
     readonly Dictionary<uint, PadState> _pads = [];
     int _order;
+    // スナップショットに渡す写し。変わったときだけ作り直す
+    IReadOnlyList<PadInfo>? _infos;
+    IReadOnlyDictionary<uint, PadLive>? _live;
+    IReadOnlyDictionary<uint, (StickValue Left, StickValue Right)>? _sticks;
 
     public IReadOnlyDictionary<uint, PadState> Pads => _pads;
 
     public float TriggerThreshold { get; set; } = 0.5f;
 
+    /// <summary>つながっているパッドの情報(つないだ順)。つなぐ・外すまで同じ物を返す。</summary>
+    public IReadOnlyList<PadInfo> Infos() => _infos ??= [.. _pads.Values.OrderBy(p => p.Order).Select(p => p.Info)];
+
+    /// <summary>全部のパッドの今の状態。鍵は InstanceId。どれかが変わるまで同じ物を返す。</summary>
+    public IReadOnlyDictionary<uint, PadLive> Live()
+    {
+        if (_live is null)
+        {
+            var d = new Dictionary<uint, PadLive>(_pads.Count);
+            foreach (var (id, p) in _pads)
+                d[id] = p.Live();
+            _live = d;
+        }
+        return _live;
+    }
+
+    /// <summary>全部のパッドの左右のスティック。鍵は InstanceId。軸が変わるまで同じ物を返す。</summary>
+    public IReadOnlyDictionary<uint, (StickValue Left, StickValue Right)> Sticks()
+    {
+        if (_sticks is null)
+        {
+            var d = new Dictionary<uint, (StickValue, StickValue)>(_pads.Count);
+            foreach (var (id, p) in _pads)
+                d[id] = (p.Left, p.Right);
+            _sticks = d;
+        }
+        return _sticks;
+    }
+
     public ApplyResult Apply(InputEvent e)
     {
+        if (e is PadAdded or PadRemoved)
+            (_infos, _live, _sticks) = (null, null, null);
         switch (e)
         {
             case PadAdded a:
@@ -53,6 +106,10 @@ public sealed class PadStateMachine
         }
         if (!_pads.TryGetValue(e.InstanceId, out var p))
             return default;
+        p.Changed(e is ButtonChanged);
+        _live = null;
+        if (e is AxisChanged)
+            _sticks = null;
         switch (e)
         {
             case ButtonChanged b:

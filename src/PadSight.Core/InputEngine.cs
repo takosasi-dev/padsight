@@ -25,6 +25,7 @@ public sealed class InputEngine
 {
     const ulong DuplicateWindow = 50 * Values.NsPerMs;
     const ulong CheckpointEvery = 60 * Values.NsPerSecond;
+    static readonly string[] ButtonNames = Enum.GetNames<PadButton>(); // 値は 0 から順に並ぶ
 
     readonly PadStateMachine _state = new();
     readonly PadSelector _selector = new();
@@ -42,6 +43,7 @@ public sealed class InputEngine
     bool _lastPaired, _duplicate;
     int _pairStreak;
     uint? _historyPad;
+    readonly List<string> _keys = []; // UpdateHistory の作業用。HistoryBuilder は持ち続けない
 
     public InputEngine(IClock clock, EngineConfig config, Func<Guid>? newId = null)
     {
@@ -158,22 +160,22 @@ public sealed class InputEngine
     public PadSnapshot Snapshot(ulong nowNs, long stopwatch, InputStatus status = InputStatus.Running, string? error = null, int? mappingCount = null)
     {
         PadState? sel = _selector.Selected is uint id && _state.Pads.TryGetValue(id, out var s) ? s : null;
-        RawState? raw = sel is { Info.IsMapped: false }
-            ? new RawState([.. sel.RawButtons], [.. sel.RawAxes.Select(Values.Axis)], [.. sel.RawHats])
-            : null;
+        // 変わっていない部分は前のスナップショットと同じ物を使う(どれも不変で、作った後に変えない)
+        var live = _state.Live();
+        PadLive? selLive = sel?.Live(); // live の中と同じ物
         return new PadSnapshot(
             ++_version, sel?.Info, sel is not null,
-            sel is null ? new HashSet<PadButton>() : new HashSet<PadButton>(sel.Pressed),
+            selLive?.Pressed ?? new HashSet<PadButton>(),
             sel?.Left ?? default, sel?.Right ?? default,
             sel?.LeftTrigger ?? 0, sel?.RightTrigger ?? 0,
-            [.. _history.Rows], _session.View(), nowNs, stopwatch)
+            _history.Copy(), _session.View(), nowNs, stopwatch)
         {
-            Pads = [.. _state.Pads.Values.OrderBy(p => p.Order).Select(p => p.Info)],
-            Sticks = _state.Pads.ToDictionary(kv => kv.Key, kv => (kv.Value.Left, kv.Value.Right)),
-            Live = _state.Pads.ToDictionary(kv => kv.Key, kv => Live(kv.Value)),
+            Pads = _state.Infos(),
+            Sticks = _state.Sticks(),
+            Live = live,
             LeftTrail = _leftTrail.Recent(nowNs, _config.TrailMs),
             RightTrail = _rightTrail.Recent(nowNs, _config.TrailMs),
-            Raw = raw,
+            Raw = selLive?.Raw,
             Status = status,
             Error = error,
             PressCounter = _pressCounter,
@@ -183,9 +185,6 @@ public sealed class InputEngine
             Chatter = _chatter.Snapshot(),
         };
     }
-
-    static PadLive Live(PadState p) => new(p.Info, new HashSet<PadButton>(p.Pressed), p.Left, p.Right, p.LeftTrigger, p.RightTrigger,
-        p.Info.IsMapped ? null : new RawState([.. p.RawButtons], [.. p.RawAxes.Select(Values.Axis)], [.. p.RawHats]));
 
     void UpdateHistory(ulong ns)
     {
@@ -198,19 +197,30 @@ public sealed class InputEngine
             _history.SourceChanged();
         }
         int dir;
-        List<string> keys;
+        var keys = _keys;
+        keys.Clear();
         if (p.Info.IsMapped)
         {
             dir = _direction.Resolve(p.Pressed, p.Left, _config.DirectionSource, _config.StickThreshold);
-            keys = [.. p.Pressed.Select(b => b.ToString()).Where(_historyKeys.Contains)];
+            foreach (var b in p.Pressed)
+            {
+                string name = (uint)b < (uint)ButtonNames.Length ? ButtonNames[(int)b] : b.ToString(); // SDL の新しいボタンは名前が無い
+                if (_historyKeys.Contains(name))
+                    keys.Add(name);
+            }
             if (p.LeftTriggerDown && _historyKeys.Contains("LeftTrigger")) keys.Add("LeftTrigger");
             if (p.RightTriggerDown && _historyKeys.Contains("RightTrigger")) keys.Add("RightTrigger");
-            keys.Sort(StringComparer.Ordinal);
+            if (keys.Count > 1)
+                keys.Sort(StringComparer.Ordinal);
         }
         else
         {
             dir = p.RawHats.Length > 0 ? DirectionResolver.FromHat(p.RawHats[0]) : 5;
-            keys = [.. Enumerable.Range(0, p.RawButtons.Length).Where(i => p.RawButtons[i]).Select(Values.RawKey)];
+            for (int i = 0; i < p.RawButtons.Length; i++)
+            {
+                if (p.RawButtons[i])
+                    keys.Add(Values.RawKey(i));
+            }
         }
         _history.Update(ns, dir, keys);
     }

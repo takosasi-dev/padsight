@@ -20,6 +20,8 @@ foreach (bool spin in new[] { true, false })
     double Median(Func<Result, double> f) => runs.Select(f).Order().ElementAt(Repeats / 2);
     Console.WriteLine($"[{(spin ? "spin" : "idle")}] events={r.Events} snapshots={r.Snaps} gen0(median)={Median(x => x.Gen0)}  (median of {Repeats})");
     Console.WriteLine($"  Apply:    {r.ApplyBytes / Math.Max(1, r.Events),8} B/event  {Median(x => x.ApplyUs),8:F3} us/event");
+    if (r.AxisEvents > 0)
+        Console.WriteLine($"    (axis only: {r.AxisBytes / r.AxisEvents} B/event, others: {(r.ApplyBytes - r.AxisBytes) / Math.Max(1, r.Events - r.AxisEvents)} B/event)");
     Console.WriteLine($"  Snapshot: {r.SnapBytes / Math.Max(1, r.Snaps),8} B/snap   {Median(x => x.SnapUs),8:F3} us/snap");
     Console.WriteLine($"  Total:    {r.TotalBytes / Seconds,8} B per simulated second (Apply + Snapshot + Tick)");
     Console.WriteLine($"  digest={dg:X16}");
@@ -33,7 +35,7 @@ static Result Run(bool spin, bool digest)
     engine.Apply(new PadAdded(0, 2, Pad(2, "guid-b")));
     PadButton[] taps = [PadButton.South, PadButton.East, PadButton.West, PadButton.North];
 
-    long applyBytes = 0, applyTicks = 0, applyCount = 0;
+    long applyBytes = 0, applyTicks = 0, applyCount = 0, axisBytes = 0, axisCount = 0;
     long snapBytes = 0, snapTicks = 0, snapCount = 0;
     long dg = 17;
     var sw = new Stopwatch();
@@ -47,7 +49,10 @@ static Result Run(bool spin, bool digest)
         sw.Restart();
         engine.Apply(e);
         sw.Stop();
-        applyBytes += GC.GetAllocatedBytesForCurrentThread() - b;
+        b = GC.GetAllocatedBytesForCurrentThread() - b;
+        applyBytes += b;
+        if (e is AxisChanged)
+            (axisBytes, axisCount) = (axisBytes + b, axisCount + 1);
         applyTicks += sw.ElapsedTicks;
         applyCount++;
     }
@@ -103,7 +108,7 @@ static Result Run(bool spin, bool digest)
     long total = applyBytes + snapBytes + tickBytes; // digest の割り当ては数えない
     gen0 = GC.CollectionCount(0) - gen0;
     double us(long ticks, long n) => n == 0 ? 0 : ticks * 1e6 / Stopwatch.Frequency / n;
-    return new(applyCount, snapCount, applyBytes, snapBytes, total, us(applyTicks, applyCount), us(snapTicks, snapCount), gen0, dg);
+    return new(applyCount, snapCount, axisCount, axisBytes, applyBytes, snapBytes, total, us(applyTicks, applyCount), us(snapTicks, snapCount), gen0, dg);
 }
 
 static PadInfo Pad(uint id, string guid) =>
@@ -144,7 +149,7 @@ static long Digest(PadSnapshot s)
     static long Stick(StickValue x) => x.RawX * 65537L + x.RawY + (long)(x.X * 1e6);
 }
 
-sealed record Result(long Events, long Snaps, long ApplyBytes, long SnapBytes, long TotalBytes, double ApplyUs, double SnapUs, int Gen0, long Digest);
+sealed record Result(long Events, long Snaps, long AxisEvents, long AxisBytes, long ApplyBytes, long SnapBytes, long TotalBytes, double ApplyUs, double SnapUs, int Gen0, long Digest);
 
 sealed class SimClock : IClock
 {

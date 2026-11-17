@@ -21,13 +21,25 @@ public sealed class StickTrail
         if (trailMs <= 0 || _count == 0)
             return [];
         ulong span = (ulong)trailMs * Values.NsPerMs;
-        var list = new List<TrailPoint>();
+        // 先に数えてから、ちょうどの長さの配列に写す(List を伸ばしながら作ると、捨てる配列が何本も出る)。
+        // 時刻が戻った点もあるので、範囲は連続とみなさず 1 点ずつ見る
+        int n = 0;
         for (int i = 0; i < _count; i++)
         {
-            var p = _buf[(_next - _count + i + Capacity) % Capacity];
-            if (nowNs < p.Ns || nowNs - p.Ns <= span)
-                list.Add(p);
+            if (InWindow(_buf[(_next - _count + i + Capacity) % Capacity].Ns, nowNs, span))
+                n++;
         }
-        return list;
+        if (n == 0)
+            return [];
+        var arr = new TrailPoint[n];
+        for (int i = 0, j = 0; i < _count; i++)
+        {
+            var p = _buf[(_next - _count + i + Capacity) % Capacity];
+            if (InWindow(p.Ns, nowNs, span))
+                arr[j++] = p;
+        }
+        return arr;
     }
+
+    static bool InWindow(ulong ns, ulong nowNs, ulong span) => nowNs < ns || nowNs - ns <= span;
 }

@@ -40,6 +40,9 @@ public sealed class SessionTracker
     int _peak1;
     readonly Dictionary<string, (PadInfo Info, long Inputs, Dictionary<string, long> Buttons)> _perGuid = [];
     long? _prevDuration, _prevInputs;
+    // 画面に渡す写し。上位 5 つはボタンの回数が変わったときだけ並べ直す
+    IReadOnlyList<KeyValuePair<string, long>>? _top5;
+    SessionView? _view;
 
     public SessionTracker(IClock clock, Func<Guid>? newId = null)
     {
@@ -67,6 +70,7 @@ public sealed class SessionTracker
             _peak = 0;
             _last60 = 0;
             _buttons.Clear();
+            _top5 = null;
             _perPad.Clear();
             _recent.Clear();
             _recent1.Clear();
@@ -84,6 +88,7 @@ public sealed class SessionTracker
             return;
         _inputs++;
         _buttons[key] = _buttons.GetValueOrDefault(key) + 1;
+        _top5 = null;
         if (pad is not null)
             _perPad[pad.InstanceId] = (pad, (_perPad.TryGetValue(pad.InstanceId, out var p) ? p.Count : 0) + 1);
         if (pad is not null)
@@ -129,10 +134,16 @@ public sealed class SessionTracker
     /// <summary>進行中のセッションの写し(current_session.json 用)。</summary>
     public SessionRecord? Checkpoint() => _active ? Build(ToUtc(_lastOpNs)) : null;
 
-    public SessionView View() => new(
-        _active, _startNs, _inputs, _last60, _peak,
-        _buttons.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).Take(5).ToList(),
-        _prevDuration, _prevInputs) { Peak1s = _peak1 };
+    /// <summary>統計のパネルに出す値。どの値も変わっていなければ前と同じ物を返す。</summary>
+    public SessionView View()
+    {
+        _top5 ??= _buttons.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).Take(5).ToList();
+        if (_view is { } v && v.Active == _active && v.StartNs == _startNs && v.Inputs == _inputs && v.Last60 == _last60
+            && v.Peak == _peak && v.Peak1s == _peak1 && v.PreviousDurationSeconds == _prevDuration && v.PreviousInputs == _prevInputs
+            && ReferenceEquals(v.Top5, _top5))
+            return v;
+        return _view = new(_active, _startNs, _inputs, _last60, _peak, _top5, _prevDuration, _prevInputs) { Peak1s = _peak1 };
+    }
 
     ulong IdleNs => (ulong)IdleMinutes * 60 * Values.NsPerSecond;
 
