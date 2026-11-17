@@ -156,7 +156,7 @@ public sealed class HomeTab : UserControl
     public void Render(PadSnapshot s, ulong nowNs, bool active)
     {
         TrackBackground(s, active);
-        if (s.Version == _lastVersion)
+        if (s.Version == _lastVersion && !_mini.Animating(s)) // 押した瞬間の光(FR-49)が消えるまでは描き続ける
             return;
         _lastVersion = s.Version;
         var settings = App.Current.Settings;
