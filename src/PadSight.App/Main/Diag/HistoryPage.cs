@@ -16,7 +16,7 @@ public sealed class HistoryPage : IDiagPage
 {
     readonly ListBox _list = new()
     {
-        SelectionMode = SelectionMode.Extended, MaxHeight = 380, BorderThickness = new Thickness(0), Padding = new Thickness(0),
+        SelectionMode = SelectionMode.Extended, MaxHeight = 290, BorderThickness = new Thickness(0), Padding = new Thickness(0),
         Background = System.Windows.Media.Brushes.Transparent, Margin = new Thickness(-8, 4, -8, 0),
     };
     readonly Border _emptyBox = Ui.Empty(Ui.Weak("まだ残した結果はありません\n各テストの結果の下にある「この結果を残す」で、ここに残せます"));

@@ -48,7 +48,9 @@ public sealed class DiagnosticsTab : UserControl
     string _padsKey = "";
     bool _tapOn;
     // 報告の間隔の参考値(§9.20)。ページが測っている間の DiagSample と、参考値がまだ無いうちにスティックが動いた直後の 2 秒だけ積む分で数える
+    // 出すのはそのパッドで測れた一番短い間隔(イベントは値が変わったときだけ来るので、少なく数えることはあっても多くは数えない)
     readonly PollingRate _rate = new();
+    PollingStats? _rateBest;
     uint? _ratePad;
     (StickValue, StickValue) _rateSticks;
     long _rateWantUntil, _rateShownAt;
@@ -178,6 +180,7 @@ public sealed class DiagnosticsTab : UserControl
         {
             _ratePad = pad?.InstanceId;
             _rate.Reset();
+            _rateBest = null;
             _rateShownAt = 0;
         }
         if (pad is null || !s.Sticks.TryGetValue(pad.InstanceId, out var sticks))
@@ -186,10 +189,10 @@ public sealed class DiagnosticsTab : UserControl
         if (sticks != _rateSticks)
         {
             _rateSticks = sticks;
-            if (!_rate.Stats.Ready)
+            if (_rateBest is null)
                 _rateWantUntil = now + 2000;
         }
-        return now < _rateWantUntil && !_rate.Stats.Ready;
+        return now < _rateWantUntil && _rateBest is null;
     }
 
     /// <summary>文字は 0.5 秒ごとにだけ替える(上の帯の測り直しを減らす)。</summary>
@@ -199,9 +202,11 @@ public sealed class DiagnosticsTab : UserControl
         if (now - _rateShownAt < 500)
             return _rateText;
         _rateShownAt = now;
-        var st = _rate.Stats;
+        if (_rate.Stats is { Ready: true } cur && (_rateBest is null || cur.MedianIntervalMs < _rateBest.MedianIntervalMs))
+            _rateBest = cur;
+        var st = _rateBest;
         var inv = CultureInfo.InvariantCulture;
-        _rateText = !st.Ready ? "—(スティックを動かすと測ります)"
+        _rateText = st is null ? "—(スティックを動かすと測ります)"
             : $"{st.MedianIntervalMs.ToString(st.MedianIntervalMs < 1 ? "0.00" : "0.0", inv)} ms(約 {st.Hz.ToString("0", inv)} Hz)";
         return _rateText;
     }
