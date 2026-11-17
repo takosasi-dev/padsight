@@ -31,6 +31,8 @@ public sealed class StickView : PanelView
         public required Rectangle TriggerFill;
         public required Line Threshold;
         public required OutlineText TriggerPct;
+        /// <summary>前に数値の行へ書いた値(同じなら行を書き直さない。軌跡のある間は毎フレーム描くため)。</summary>
+        public (StickValue V, bool Raw)? Shown;
     }
 
     readonly Side _l, _r;
@@ -146,19 +148,11 @@ public sealed class StickView : PanelView
         for (int i = used; i < Segments; i++)
             side.Trail[i].Visibility = Visibility.Hidden;
 
-        // 数値: 見出しは弱い色、値は文字の色(Consolas で桁をそろえる)。生の値を出すときは X と Y を 1 行ずつ
-        string angle = v.Magnitude < 0.05f ? "—" : ((int)Math.Round(v.AngleDeg) % 360).ToString(inv) + "°";
-        if (st.ShowRaw)
+        // 数値は値が変わったときだけ書き直す(軌跡のある間は毎フレーム描くため)
+        if (side.Shown != (v, st.ShowRaw))
         {
-            Row(side.Rows[0], "X ", $"{v.RawX.ToString("+0;-0", inv)} ({v.X.ToString("+0.000;-0.000", inv)})");
-            Row(side.Rows[1], "Y ", $"{v.RawY.ToString("+0;-0", inv)} ({v.Y.ToString("+0.000;-0.000", inv)})");
-            Row(side.Rows[2], "倒し ", v.Magnitude.ToString("0.000", inv), "  角度 ", angle);
-        }
-        else
-        {
-            Row(side.Rows[0], "X ", v.X.ToString("+0.000;-0.000", inv), "  Y ", v.Y.ToString("+0.000;-0.000", inv));
-            Row(side.Rows[1], "倒し ", v.Magnitude.ToString("0.000", inv), "  角度 ", angle);
-            Row(side.Rows[2], "");
+            side.Shown = (v, st.ShowRaw);
+            WriteRows(side.Rows, v, st.ShowRaw);
         }
 
         side.TriggerLabel.Text = trigName;
@@ -168,6 +162,25 @@ public sealed class StickView : PanelView
         side.TriggerFill.Fill = trigger >= st.TriggerThreshold ? pressedBrush : Draw.Weak;
         side.Threshold.Y1 = side.Threshold.Y2 = GaugeY + GaugeH * (1 - st.TriggerThreshold);
         side.TriggerPct.Text = Math.Round(trigger * 100).ToString(inv) + "%";
+    }
+
+    /// <summary>見出しは弱い色、値は文字の色(Consolas で桁をそろえる)。生の値を出すときは X と Y を 1 行ずつ。</summary>
+    static void WriteRows(OutlineText[] rows, StickValue v, bool raw)
+    {
+        var inv = CultureInfo.InvariantCulture;
+        string angle = v.Magnitude < 0.05f ? "—" : ((int)Math.Round(v.AngleDeg) % 360).ToString(inv) + "°";
+        if (raw)
+        {
+            Row(rows[0], "X ", $"{v.RawX.ToString("+0;-0", inv)} ({v.X.ToString("+0.000;-0.000", inv)})");
+            Row(rows[1], "Y ", $"{v.RawY.ToString("+0;-0", inv)} ({v.Y.ToString("+0.000;-0.000", inv)})");
+            Row(rows[2], "倒し ", v.Magnitude.ToString("0.000", inv), "  角度 ", angle);
+        }
+        else
+        {
+            Row(rows[0], "X ", v.X.ToString("+0.000;-0.000", inv), "  Y ", v.Y.ToString("+0.000;-0.000", inv));
+            Row(rows[1], "倒し ", v.Magnitude.ToString("0.000", inv), "  角度 ", angle);
+            Row(rows[2], "");
+        }
     }
 
     /// <summary>見出しと値を交互に渡す(見出しは弱い色)。</summary>
