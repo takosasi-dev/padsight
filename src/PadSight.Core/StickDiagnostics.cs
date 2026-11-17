@@ -1,11 +1,39 @@
-// スティック診断の計算(仕様書 §9.9・§9.18)。手を離したときのずれ、外周の形、トリガーの範囲。
-// 集めた値を受けて結果を返すだけ。良い・悪いを言うのはトリガーの範囲だけ(FR-46)。結果は保存しない(FR-23)。
+// スティック診断の計算(仕様書 §9.9・§9.18・FR-56)。手を離したときのずれ、外周の形、トリガーの範囲。
+// 集めた値を受けて結果を返すだけ。ずれには PadLab の DriftAnalyzer の目安(0.03・0.08)、外周には CircleTest の真円度と左右・上下の差を足した。
 namespace PadSight.Core;
 
-public sealed record DriftResult(float MeanX, float MeanY, float MeanMagnitude, float MaxMagnitude, double RawMeanX, double RawMeanY);
+/// <param name="Noise">平均の位置からの距離の標準偏差(揺れ。PadLab の DeviceSession.Noise と同じ求め方)</param>
+/// <param name="MaxFromMean">平均の位置からの距離の最大(手を離している間の動き。PadLab の DriftAnalyzer の MaxDistance にあたる)</param>
+public sealed record DriftResult(float MeanX, float MeanY, float MeanMagnitude, float MaxMagnitude, double RawMeanX, double RawMeanY, float Noise = 0, float MaxFromMean = 0)
+{
+    /// <summary>PadLab の DriftThresholds の既定(軽いずれ・大きなずれ)。</summary>
+    public const float MinorDistance = 0.03f, NotableDistance = 0.08f;
+
+    /// <summary>0 = 目安の範囲内、1 = 軽いずれ、2 = 大きなずれ。PadLab と同じく、止まった位置(平均)からの動きで見る(止まった位置そのもののずれは、デッドゾーンの円の内側・外側で見る)。</summary>
+    public int Tier => MaxFromMean >= NotableDistance ? 2 : MaxFromMean >= MinorDistance ? 1 : 0;
+
+    /// <summary>判定の文(断定しない)。</summary>
+    public string Verdict => Tier switch
+    {
+        2 => "手を離している間に、目安(0.080)より大きく動いている可能性があります",
+        1 => "手を離している間に、少し動いている可能性があります(目安 0.030〜0.080)",
+        _ => "手を離している間の動きは、目安(0.030)より小さい範囲です",
+    };
+
+    /// <summary>平均のずれの向き(0〜360 度。右が 0、反時計回り)。</summary>
+    public float DirectionDeg => Values.Angle(MeanX, MeanY);
+}
 
 /// <param name="BinMax">5 度ずつ 72 の区切りの倒し具合の最大。値の入らない区切りは NaN</param>
-public sealed record OuterResult(float[] BinMax, int EmptyBins, bool Insufficient, float Mean, float Min, float Max, float DeviationPercent);
+/// <param name="Roundness">最小 ÷ 最大(1 に近いほど丸い。PadLab の CircleTest と同じ)</param>
+/// <param name="AsymmetryX">(右の端 − 左の端) ÷ 平均。正なら右が大きい</param>
+/// <param name="AsymmetryY">(上の端 − 下の端) ÷ 平均。正なら上が大きい</param>
+public sealed record OuterResult(float[] BinMax, int EmptyBins, bool Insufficient, float Mean, float Min, float Max, float DeviationPercent,
+    float Roundness = 0, float AsymmetryX = 0, float AsymmetryY = 0)
+{
+    /// <summary>記録とレポートに描く形(72 個、0〜1)。値の入らない区切りは 0。</summary>
+    public IReadOnlyList<double> Shape => [.. BinMax.Select(b => float.IsNaN(b) ? 0.0 : Math.Round(b, 4))];
+}
 
 /// <summary>最小と最大は 0〜1。Verdict は「問題なし」「戻りきっていません」「奥まで届いていません」「引き方が足りません」。</summary>
 public sealed record TriggerRangeResult(float Min, float Max, string Verdict);
@@ -30,8 +58,11 @@ public static class StickDiagnostics
         if (samples.Count == 0)
             return new DriftResult(0, 0, 0, 0, 0, 0);
         float mx = samples.Average(s => s.X), my = samples.Average(s => s.Y);
+        var dist = samples.Select(s => (double)MathF.Sqrt((s.X - mx) * (s.X - mx) + (s.Y - my) * (s.Y - my))).ToList();
+        double dm = dist.Average();
+        float noise = (float)Math.Sqrt(Math.Max(0, dist.Average(d => d * d) - dm * dm));
         return new DriftResult(mx, my, MathF.Min(1f, MathF.Sqrt(mx * mx + my * my)), samples.Max(s => s.Magnitude),
-            samples.Average(s => (double)s.RawX), samples.Average(s => (double)s.RawY));
+            samples.Average(s => (double)s.RawX), samples.Average(s => (double)s.RawY), noise, (float)dist.Max());
     }
 
     public static OuterResult Outer(IReadOnlyList<StickValue> samples)
@@ -50,7 +81,13 @@ public static class StickDiagnostics
         int empty = Bins - filled.Count;
         if (empty >= 8)
             return new OuterResult(bins, empty, true, 0, 0, 0, 0);
-        return new OuterResult(bins, empty, false, filled.Average(), filled.Min(), filled.Max(),
-            filled.Average(b => MathF.Abs(1f - b)) * 100f);
+        float mean = filled.Average(), min = filled.Min(), max = filled.Max();
+        // 軸の両側の 2 つの区切り(例 0 度なら 355〜360 と 0〜5)の大きい方を、その向きの端とする
+        float Edge(int bin) => MaxOf(bins[(bin + Bins - 1) % Bins], bins[bin]);
+        float Asym(int a, int b) => float.IsNaN(Edge(a)) || float.IsNaN(Edge(b)) ? 0 : (Edge(a) - Edge(b)) / mean;
+        return new OuterResult(bins, empty, false, mean, min, max, filled.Average(b => MathF.Abs(1f - b)) * 100f,
+            min / max, Asym(0, 36), Asym(18, 54));
     }
+
+    static float MaxOf(float a, float b) => float.IsNaN(a) ? b : float.IsNaN(b) ? a : MathF.Max(a, b);
 }
