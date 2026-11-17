@@ -9,9 +9,10 @@ namespace PadSight.App;
 public static class Theme
 {
     // Hover は指を置いたときの塗り、Primary は主なボタンの塗り(白い文字と 4.5:1 以上になる濃さ)。2026-11-17 に足した
-    static readonly string[] Keys = ["Background", "Surface", "Border", "Text", "SubText", "Accent", "Success", "Warning", "Error", "Hover", "Primary", "Selected"];
-    static readonly string[] Dark = ["#1E1F22", "#2B2D31", "#3F4147", "#F2F3F5", "#B5BAC1", "#4F8EF7", "#3BA55D", "#E0A800", "#ED4245", "#383A40", "#2F6FE0", "#33405A"];
-    static readonly string[] Light = ["#F5F6F8", "#FFFFFF", "#D6D8DC", "#1E1F22", "#5C5F66", "#2F6FE0", "#2D8A4B", "#B58600", "#D13438", "#ECEEF1", "#2F6FE0", "#DCE7FB"];
+    // WarningText は警告の色で文字を書くとき用(明るいテーマの Warning #B58600 は地との差が 3.3:1 しか無いので、文字だけ濃くする。暗いテーマは Warning と同じ)
+    static readonly string[] Keys = ["Background", "Surface", "Border", "Text", "SubText", "Accent", "Success", "Warning", "Error", "Hover", "Primary", "Selected", "WarningText"];
+    static readonly string[] Dark = ["#1E1F22", "#2B2D31", "#3F4147", "#F2F3F5", "#B5BAC1", "#4F8EF7", "#3BA55D", "#E0A800", "#ED4245", "#383A40", "#2F6FE0", "#33405A", "#E0A800"];
+    static readonly string[] Light = ["#F5F6F8", "#FFFFFF", "#D6D8DC", "#1E1F22", "#5C5F66", "#2F6FE0", "#2D8A4B", "#B58600", "#D13438", "#ECEEF1", "#2F6FE0", "#DCE7FB", "#8A6400"];
 
     public static void Apply(string theme)
     {

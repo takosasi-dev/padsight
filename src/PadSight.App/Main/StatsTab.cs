@@ -20,20 +20,23 @@ public sealed class StatsTab : UserControl
     readonly ComboBox _period;
     readonly Button _split, _export;
     readonly TextBlock _exportNote = Ui.Weak();
-    readonly TextBlock _totals = Ui.Text();
+    // 期間の合計は 4 枚の数の札で出す(合計の時間・入力・1 分あたり・セッション)
+    readonly TextBlock _totalTime, _totalInputs, _totalPerMin, _totalSessions;
     readonly TextBlock _bad = Ui.Weak();
     readonly TextBlock _done = Ui.Text();
     readonly Button _openFolder;
-    readonly ListView _list = new() { MinHeight = 200 };
+    readonly ListView _list = new() { MaxHeight = 340, Margin = new Thickness(0, 0, 0, 4) }; // 長い期間でもページが伸びすぎないように、表の中でスクロールする
     readonly TextBlock _empty = Ui.Weak("この期間の記録はありません");
-    readonly ListView _padList = new() { MinHeight = 80, VerticalAlignment = VerticalAlignment.Top }; // 横の絵の高さまで伸びないように
+    readonly Border _emptyBox;
+    readonly ListView _padList = new() { VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 0, 0, 8) };
     readonly TextBlock _padEmpty = Ui.Weak("まだ記録がありません");
+    readonly Border _padEmptyBox;
     // FR-47: 選んだパッドの絵(重ねるパネルとは別の PadView)。パネルの色で描くので、地はパネルの地の色にする
     readonly PadView _heat = new();
     readonly TextBlock _heatTop = Ui.Text();
     readonly TextBlock _heatNone = Ui.Weak("このパッドは絵がありません");
     readonly Border _heatBox;
-    readonly StackPanel _heatPanel = new() { Margin = new Thickness(16, 0, 0, 0), Visibility = Visibility.Collapsed };
+    readonly StackPanel _heatPanel = new() { Margin = new Thickness(0, 0, 0, 4), Visibility = Visibility.Collapsed };
     string? _selectedGuid;
     string _periodValue = "week";
     List<SessionRecord> _all = [];
@@ -49,38 +52,65 @@ public sealed class StatsTab : UserControl
         _openFolder = Ui.Button("フォルダを開く", () => { if (_lastExportDir is not null) ShellOpen.Folder(_lastExportDir); });
         _openFolder.Visibility = Visibility.Collapsed;
         var grid = new GridView();
-        foreach (var (h, p, w) in new[] { ("始まり", nameof(Row.Start), 110.0), ("長さ", nameof(Row.Length), 80.0), ("入力", nameof(Row.Inputs), 80.0),
-            ("1 分あたり", nameof(Row.PerMin), 90.0), ("60 秒の最大", nameof(Row.Peak), 90.0), ("1 秒の最大", nameof(Row.Peak1), 80.0), ("多いボタン", nameof(Row.Top), 260.0) })
-            grid.Columns.Add(new GridViewColumn { Header = h, Width = w, DisplayMemberBinding = new Binding(p) });
+        // 列の幅の合計は、いちばん狭い窓(幅 780)でも横にスクロールしない 712 にする
+        grid.Columns.Add(Ui.Column("始まり", nameof(Row.Start), 100));
+        grid.Columns.Add(Ui.Column("長さ", nameof(Row.Length), 76, number: true));
+        grid.Columns.Add(Ui.Column("入力", nameof(Row.Inputs), 76, number: true));
+        grid.Columns.Add(Ui.Column("1 分あたり", nameof(Row.PerMin), 84, number: true));
+        grid.Columns.Add(Ui.Column("60 秒の最大", nameof(Row.Peak), 92, number: true));
+        grid.Columns.Add(Ui.Column("1 秒の最大", nameof(Row.Peak1), 84, number: true));
+        grid.Columns.Add(Ui.Column("多いボタン", nameof(Row.Top), 200));
         _list.View = grid;
-        var stack = new StackPanel();
-        stack.Children.Add(Ui.Horizontal(Ui.Text("期間  "), _period, Ui.Text("   "), _split, _export));
-        stack.Children.Add(_exportNote); // 長い文なので、ボタンの横ではなく次の行に折り返して出す
-        stack.Children.Add(Ui.Horizontal(_done, _openFolder));
-        _totals.FontSize = 15;
-        _totals.Margin = new Thickness(0, 8, 0, 8);
-        stack.Children.Add(_totals);
-        stack.Children.Add(_list);
-        stack.Children.Add(_empty);
-        stack.Children.Add(_bad);
-        stack.Children.Add(Ui.Section("直近 30 日"));
-        stack.Children.Add(Ui.Row("見る値", Ui.Combo([("inputs", "入力の数"), ("minutes", "遊んだ時間(分)"), ("peak1s", "1 秒の最大")], _metric,
-            v => { _metric = v; RefreshChart(); }), 80));
-        stack.Children.Add(_chart);
+        _emptyBox = Ui.Empty(_empty);
+
+        // 上の帯: 期間は左、操作は右(§4.8 の絵)。幅が足りなければ操作は次の行へ
+        var periodLabel = Ui.Text("期間");
+        periodLabel.Margin = new Thickness(0, 0, 10, 0);
+        System.Windows.Automation.AutomationProperties.SetName(_period, "期間");
+        _split.Margin = new Thickness(0, 2, 8, 2);
+        _export.Margin = new Thickness(0, 2, 0, 2);
+        var actions = Ui.Horizontal(_split, _export);
+        var bar = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(actions, Dock.Right);
+        bar.Children.Add(actions);
+        bar.Children.Add(Ui.Horizontal(periodLabel, _period));
+        Ui.SetText(_exportNote, "");
+        _exportNote.HorizontalAlignment = HorizontalAlignment.Right; // 押せない「書き出す」の下に、理由を出す
+        Ui.SetText(_done, "");
+        var tiles = new WrapPanel { Margin = new Thickness(0, 14, 0, 4) };
+        tiles.Children.Add(Ui.Stat("合計", out _totalTime));
+        tiles.Children.Add(Ui.Stat("入力", out _totalInputs));
+        tiles.Children.Add(Ui.Stat("1 分あたり", out _totalPerMin));
+        tiles.Children.Add(Ui.Stat("セッション", out _totalSessions));
+        // セッションの表は縁を持つので、箱には入れない(箱の中の箱にしない)
+        _bad.Margin = new Thickness(0, 0, 0, 4);
+        var sessions = new StackPanel { Margin = new Thickness(0, 0, 0, 16) };
+        sessions.Children.Add(_list);
+        sessions.Children.Add(_emptyBox);
+        sessions.Children.Add(_bad);
+
+        var chart = Ui.Card("直近 30 日",
+            Ui.Row("見る値", Ui.Combo([("inputs", "入力の数"), ("minutes", "遊んだ時間(分)"), ("peak1s", "1 秒の最大")], _metric, v => { _metric = v; RefreshChart(); })),
+            _chart);
+
         var padGrid = new GridView();
-        foreach (var (h, p, w) in new[] { ("パッド", nameof(PadTotalRow.Name), 260.0), ("種類", nameof(PadTotalRow.Kind), 110.0), ("通算の入力", nameof(PadTotalRow.Inputs), 100.0),
-            ("多いボタン", nameof(PadTotalRow.Top), 240.0), ("最後に使った日", nameof(PadTotalRow.LastUsed), 110.0) })
-            padGrid.Columns.Add(new GridViewColumn { Header = h, Width = w, DisplayMemberBinding = new Binding(p) });
+        padGrid.Columns.Add(Ui.Column("パッド", nameof(PadTotalRow.Name), 230));
+        padGrid.Columns.Add(Ui.Column("種類", nameof(PadTotalRow.Kind), 100));
+        padGrid.Columns.Add(Ui.Column("通算の入力", nameof(PadTotalRow.Inputs), 100, number: true));
+        padGrid.Columns.Add(Ui.Column("多いボタン", nameof(PadTotalRow.Top), 210));
+        padGrid.Columns.Add(Ui.Column("最後に使った日", nameof(PadTotalRow.LastUsed), 110));
         _padList.View = padGrid;
         _padList.SelectionChanged += (_, _) => ShowHeat();
-        _heatBox = new Border { Child = new Viewbox { Child = _heat, Width = 360, Height = 240 }, Background = Draw.Background, CornerRadius = new CornerRadius(8), Padding = new Thickness(8), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 0) };
+        _heatBox = Ui.Picture(new Viewbox { Child = _heat, Width = 360, Height = 240 });
+        _heatBox.Margin = new Thickness(0, 6, 0, 0);
+        _heatTop.Margin = new Thickness(0, 4, 0, 0);
         _heatPanel.Children.Add(_heatTop);
         _heatPanel.Children.Add(_heatBox);
         _heatPanel.Children.Add(_heatNone);
-        stack.Children.Add(Ui.Section("パッドごとの通算"));
-        stack.Children.Add(Ui.Horizontal(_padList, _heatPanel)); // 表の右に絵。幅が足りなければ下へ折り返す
-        stack.Children.Add(_padEmpty);
-        Content = Ui.Scroll(stack);
+        _padEmptyBox = Ui.Empty(_padEmpty);
+        // 選んだパッドの絵は表の下に置く(§4.8「表の右、幅が足りなければ下」。表がほぼ全幅なので、いつも下になる)
+        var pads = Ui.Card("パッドごとの通算", _padList, _padEmptyBox, _heatPanel);
+        Content = Ui.Page(bar, _exportNote, Ui.Horizontal(_done, _openFolder), tiles, sessions, chart, pads);
         App.Current.Sessions.Appended += () => Dispatcher.BeginInvoke(Reload);
     }
 
@@ -88,13 +118,13 @@ public sealed class StatsTab : UserControl
     {
         var (records, bad) = App.Current.Sessions.ReadAll();
         _all = records;
-        _bad.Text = bad > 0 ? $"読めなかった行: {bad}" : "";
+        Ui.SetText(_bad, bad > 0 ? $"読めなかった行: {bad}" : "");
         RefreshPads();
         RefreshChart();
         Refresh();
     }
 
-    readonly Canvas _chart = new() { Width = 600, Height = 150, Margin = new Thickness(0, 4, 0, 8), HorizontalAlignment = HorizontalAlignment.Left };
+    readonly Canvas _chart = new() { Width = 600, Height = 150, Margin = new Thickness(0, 6, 0, 8), HorizontalAlignment = HorizontalAlignment.Left };
     string _metric = "inputs";
 
     /// <summary>FR-41: 直近 30 日の日ごとの棒。期間の選択とは関係なく、いつも直近 30 日。</summary>
@@ -153,7 +183,8 @@ public sealed class StatsTab : UserControl
             x.Key, x.Value)).ToList();
         _padList.ItemsSource = rows;
         _padList.SelectedItem = rows.FirstOrDefault(r => r.Guid == keep);
-        _padEmpty.Visibility = pads.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        _padEmptyBox.Visibility = pads.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        _padList.Visibility = pads.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         ShowHeat();
     }
 
@@ -202,7 +233,10 @@ public sealed class StatsTab : UserControl
         long secs = _inPeriod.Sum(r => r.DurationSeconds), inputs = _inPeriod.Sum(r => r.Inputs);
         var inv = CultureInfo.InvariantCulture;
         var t = TimeSpan.FromSeconds(secs);
-        _totals.Text = $"合計 {(int)t.TotalHours} 時間 {t.Minutes} 分    入力 {inputs.ToString("N0", inv)}    1 分あたり {(secs > 0 ? (inputs / (secs / 60.0)).ToString("0.0", inv) : "—")}    セッション {_inPeriod.Count}";
+        _totalTime.Text = $"{(int)t.TotalHours} 時間 {t.Minutes} 分";
+        _totalInputs.Text = inputs.ToString("N0", inv);
+        _totalPerMin.Text = secs > 0 ? (inputs / (secs / 60.0)).ToString("0.0", inv) : "—";
+        _totalSessions.Text = _inPeriod.Count.ToString(inv);
         _list.ItemsSource = _inPeriod.Select(r => new Row(
             r.StartUtc.ToLocalTime().ToString("MM/dd HH:mm", inv),
             Length(r.DurationSeconds),
@@ -212,10 +246,11 @@ public sealed class StatsTab : UserControl
             r.PeakPerSecond.ToString(inv),
             string.Join(" / ", r.Buttons.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).Take(3)
                 .Select(kv => $"{Labels.ForRecord(kv.Key, r.PadKind)} {kv.Value}")))).ToList();
-        _empty.Visibility = _inPeriod.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        _emptyBox.Visibility = _inPeriod.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        _list.Visibility = _inPeriod.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         int n = _inPeriod.Count(GrindLogCsv.Exportable);
         _export.IsEnabled = n > 0;
-        _exportNote.Text = n > 0 ? "" : "書き出せるセッションがありません(1 分以上のセッションだけを書き出します)";
+        Ui.SetText(_exportNote, n > 0 ? "" : "書き出せるセッションがありません(1 分以上のセッションだけを書き出します)");
     }
 
     static string Length(long seconds)
@@ -246,19 +281,19 @@ public sealed class StatsTab : UserControl
             // UTF-8(BOM 付き)・CRLF(§9.6.3)
             File.WriteAllText(save.FileName, GrindLogCsv.Build(_inPeriod, dlg.Game, dlg.Kind, TimeZoneInfo.Local), new UTF8Encoding(true));
             _lastExportDir = Path.GetDirectoryName(save.FileName);
-            _done.Text = m > 0 ? $"書き出しました({n} 件。1 分に満たない {m} 件は除きました)" : $"書き出しました({n} 件)";
+            Ui.SetText(_done, m > 0 ? $"書き出しました({n} 件。1 分に満たない {m} 件は除きました)" : $"書き出しました({n} 件)");
             _openFolder.Visibility = Visibility.Visible;
             AppLog.Write($"GrindLog 向けに {n} 件を書き出した");
         }
         catch (IOException ex)
         {
             AppLog.Error("CSV の書き出し", ex);
-            _done.Text = "書き出せませんでした: " + ex.Message;
+            Ui.SetText(_done, "書き出せませんでした: " + ex.Message);
         }
         catch (UnauthorizedAccessException ex)
         {
             AppLog.Error("CSV の書き出し", ex);
-            _done.Text = "書き出せませんでした: " + ex.Message;
+            Ui.SetText(_done, "書き出せませんでした: " + ex.Message);
         }
     }
 }

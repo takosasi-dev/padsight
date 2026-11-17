@@ -19,14 +19,14 @@ public sealed class DiagTab : UserControl
     readonly RadioButton _left = new() { Content = "左", IsChecked = true, Margin = new Thickness(0, 0, 12, 0) };
     readonly RadioButton _right = new() { Content = "右" };
     readonly Button _driftBtn, _outerBtn, _trigBtn;
-    readonly Canvas _fig = new() { Width = 240, Height = 240, Background = Brushes.Black, ClipToBounds = true };
+    readonly Canvas _fig = new() { Width = 240, Height = 240, Background = Brushes.Transparent, ClipToBounds = true };
     readonly Ellipse _dot = new() { Width = 8, Height = 8, Fill = Brushes.White };
     readonly Polyline _outline = new() { Stroke = Brushes.Orange, StrokeThickness = 2 };
-    readonly TextBlock _status = Ui.Text();
+    readonly TextBlock _status = Ui.Text(); // 測っている間に文が変わるので、空でも 1 行分の高さを取っておく(図が上下に動かないように)
     readonly TextBlock _result = Ui.Text();
     readonly List<StickValue> _samples = [];
     readonly List<float> _lt = [], _rt = [];
-    readonly Grid _chatter = new() { Margin = new Thickness(0, 4, 0, 4) };
+    readonly Grid _chatter = new() { Margin = new Thickness(0, 8, 0, 8), HorizontalAlignment = HorizontalAlignment.Left };
     string? _chatterKey;
     Phase _phase;
     DateTime _phaseEnd;
@@ -42,29 +42,44 @@ public sealed class DiagTab : UserControl
         _fig.Children.Add(new Line { X1 = 120, X2 = 120, Y1 = 20, Y2 = 220, Stroke = Brushes.DimGray });
         _fig.Children.Add(_outline);
         _fig.Children.Add(_dot);
-        var grid = new Grid();
+        var grid = new Grid { Margin = new Thickness(0, 4, 0, 4) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition());
-        grid.Children.Add(new Border { Child = _fig, CornerRadius = new CornerRadius(4), Margin = new Thickness(0, 8, 16, 8) });
+        var fig = Ui.Picture(_fig);
+        fig.Margin = new Thickness(0, 0, 24, 0);
+        grid.Children.Add(fig);
         var res = new StackPanel();
-        res.Children.Add(Ui.Section("結果"));
+        var resTitle = Ui.SubSection("結果");
+        resTitle.Margin = new Thickness(0, 0, 0, 6);
+        res.Children.Add(resTitle);
+        _result.LineHeight = 24;
+        Typography.SetNumeralAlignment(_result, FontNumeralAlignment.Tabular);
         res.Children.Add(_result);
         Grid.SetColumn(res, 1);
         grid.Children.Add(res);
-        var stack = new StackPanel();
-        stack.Children.Add(Ui.Horizontal(Ui.Text("パッド "), _pad, Ui.Text("   スティック "), _left, _right));
-        stack.Children.Add(Ui.Horizontal(_driftBtn, _outerBtn, _trigBtn));
-        stack.Children.Add(_status);
-        stack.Children.Add(grid);
-        stack.Children.Add(Ui.Weak("値は SDL を通した値で、ゲームが受け取る値と同じとは限りません"));
-        stack.Children.Add(Ui.Section("ボタンの検査"));
-        stack.Children.Add(Ui.Text("ボタンを 1 回ずつ押してください。1 回しか押していないのに 2 回に数えられたら、ボタンの接点がへたっているかもしれません"));
+        _status.MinHeight = 22;
+        _status.Margin = new Thickness(0, 6, 0, 0);
+
+        var padLabel = Ui.Text("パッド");
+        padLabel.Margin = new Thickness(0, 0, 10, 0);
+        var stickLabel = Ui.Text("スティック");
+        stickLabel.Margin = new Thickness(24, 0, 12, 0);
+        System.Windows.Automation.AutomationProperties.SetName(_pad, "パッド");
+        var stick = Ui.Card(null,
+            Ui.Horizontal(padLabel, _pad, stickLabel, _left, _right),
+            Ui.Horizontal(_driftBtn, _outerBtn, _trigBtn),
+            _status,
+            grid,
+            Ui.Weak("値は SDL を通した値で、ゲームが受け取る値と同じとは限りません"));
         for (int i = 0; i < 3; i++)
             _chatter.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        stack.Children.Add(_chatter);
-        stack.Children.Add(Ui.Horizontal(Ui.Button("数え直す", () => App.Current.PostToInput(e => e.ResetChatter()))));
-        stack.Children.Add(Ui.Weak("離してから 15 ミリ秒未満で押されたときに数えます。0 回でも壊れていないとは限りません"));
-        Content = Ui.Scroll(stack);
+        var chatter = Ui.Card("ボタンの検査",
+            Ui.Text("ボタンを 1 回ずつ押してください。1 回しか押していないのに 2 回に数えられたら、ボタンの接点がへたっているかもしれません"),
+            _chatter,
+            Ui.Horizontal(Ui.Button("数え直す", () => App.Current.PostToInput(e => e.ResetChatter()))),
+            Ui.Weak("離してから 15 ミリ秒未満で押されたときに数えます。0 回でも壊れていないとは限りません"));
+        Content = Ui.Page(stick, chatter);
+        _pad.MinWidth = 300;
     }
 
     StickValue? Current(PadSnapshot s)
@@ -214,22 +229,34 @@ public sealed class DiagTab : UserControl
             AddChatterRow(name, c.Presses.ToString(inv), c.Short.ToString(inv), header: false, warn: c.Short >= 1);
     }
 
+    /// <summary>表の 1 行。見出しは小さい弱い文字と下の線、数は右にそろえる。「すぐにまた押された回数」が 1 以上の行は、警告の色の文字に太字を足す(色だけにしない)。</summary>
     void AddChatterRow(string name, string presses, string shorts, bool header, bool warn)
     {
         int row = _chatter.RowDefinitions.Count;
         _chatter.RowDefinitions.Add(new RowDefinition());
         string[] cells = [name, presses, shorts];
+        if (header)
+        {
+            var line = new Border { BorderThickness = new Thickness(0, 0, 0, 1) };
+            line.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+            Grid.SetColumnSpan(line, 3);
+            _chatter.Children.Add(line);
+        }
         for (int col = 0; col < 3; col++)
         {
-            var t = Ui.Text(cells[col]);
-            t.Margin = new Thickness(0, 2, 24, 2);
-            if (header) t.FontWeight = FontWeights.SemiBold;
-            if (col > 0 && !header)
+            var t = header ? Ui.Weak(cells[col]) : Ui.Text(cells[col]);
+            t.Margin = new Thickness(col == 0 ? 0 : 32, header ? 6 : 4, 0, header ? 6 : 4);
+            if (col > 0)
             {
                 t.HorizontalAlignment = HorizontalAlignment.Right;
                 Typography.SetNumeralAlignment(t, FontNumeralAlignment.Tabular);
             }
-            if (warn) t.SetResourceReference(TextBlock.ForegroundProperty, "WarningBrush");
+            if (header) t.FontSize = 12.5;
+            if (warn)
+            {
+                t.SetResourceReference(TextBlock.ForegroundProperty, "WarningTextBrush");
+                t.FontWeight = FontWeights.SemiBold;
+            }
             Grid.SetRow(t, row);
             Grid.SetColumn(t, col);
             _chatter.Children.Add(t);

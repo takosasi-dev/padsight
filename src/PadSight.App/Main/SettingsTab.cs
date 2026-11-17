@@ -13,13 +13,14 @@ namespace PadSight.App.Main;
 public sealed class SettingsTab : UserControl
 {
     readonly StackPanel _stack = new();
+    StackPanel _cur = null!; // 今作っている区切りの箱の中身
     int _capturing;
     string _mapNote = "";
     TextBlock? _captureText;
 
     public SettingsTab()
     {
-        Content = Ui.Scroll(_stack);
+        Content = Ui.Scroll(Ui.LeftCapped(_stack, 980));
         Build();
     }
 
@@ -30,28 +31,34 @@ public sealed class SettingsTab : UserControl
         var app = App.Current;
         var s = app.Settings;
         _stack.Children.Clear();
+        // 区切りごとに箱を 1 つ作り、その中に並べる
+        void Group(string title)
+        {
+            _cur = new StackPanel();
+            _stack.Children.Add(Ui.Card(title, _cur));
+        }
 
-        _stack.Children.Add(Ui.Section("ホットキー"));
+        Group("ホットキー");
         HotkeyRow("パネルの表示切替", App.HotkeyToggle, () => s.HotkeyToggle, v => s.HotkeyToggle = v);
         HotkeyRow("配置を直す", App.HotkeyArrange, () => s.HotkeyArrange, v => s.HotkeyArrange = v);
         HotkeyRow("入力履歴を消す", App.HotkeyClear, () => s.HotkeyClearHistory, v => s.HotkeyClearHistory = v);
         HotkeyRow("入力履歴を止める", App.HotkeyPause, () => s.HotkeyPauseHistory, v => s.HotkeyPauseHistory = v); // FR-48
 
-        _stack.Children.Add(Ui.Section("起動"));
-        _stack.Children.Add(Ui.Check("ログオン時に起動する", AutoStart.IsEnabled(), AutoStart.Set));
-        _stack.Children.Add(Ui.Check("起動したときにパネルを出す", s.VisibleOnStart, v => { s.VisibleOnStart = v; app.SaveSettings(); }));
+        Group("起動");
+        _cur.Children.Add(Ui.Check("ログオン時に起動する", AutoStart.IsEnabled(), AutoStart.Set));
+        _cur.Children.Add(Ui.Check("起動したときにパネルを出す", s.VisibleOnStart, v => { s.VisibleOnStart = v; app.SaveSettings(); }));
 
-        _stack.Children.Add(Ui.Section("入力の取り方"));
-        _stack.Children.Add(Ui.Row("Windows.Gaming.Input を使う", Ui.Combo([("default", "既定"), ("on", "使う"), ("off", "使わない")], s.InputWgi,
-            v => { s.InputWgi = v; app.SaveSettings(); app.ReconnectInput(); }), 280));
-        _stack.Children.Add(Ui.Check("PlayStation のパッドを専用の方法で読む", s.InputHidapiPlayStation, v => { s.InputHidapiPlayStation = v; app.SaveSettings(); app.ReconnectInput(); }));
-        _stack.Children.Add(Ui.Check("Switch のパッドを専用の方法で読む", s.InputHidapiSwitch, v => { s.InputHidapiSwitch = v; app.SaveSettings(); app.ReconnectInput(); }));
-        _stack.Children.Add(Ui.Weak("変えるとパッドをつなぎ直します。裏で入力が届かないときに変えてください"));
-        _stack.Children.Add(Ui.Horizontal(Ui.Button("今の設定でつなぎ直す", app.ReconnectInput)));
+        Group("入力の取り方");
+        _cur.Children.Add(Ui.Row("Windows.Gaming.Input を使う", Ui.Combo([("default", "既定"), ("on", "使う"), ("off", "使わない")], s.InputWgi,
+            v => { s.InputWgi = v; app.SaveSettings(); app.ReconnectInput(); })));
+        _cur.Children.Add(Ui.Check("PlayStation のパッドを専用の方法で読む", s.InputHidapiPlayStation, v => { s.InputHidapiPlayStation = v; app.SaveSettings(); app.ReconnectInput(); }));
+        _cur.Children.Add(Ui.Check("Switch のパッドを専用の方法で読む", s.InputHidapiSwitch, v => { s.InputHidapiSwitch = v; app.SaveSettings(); app.ReconnectInput(); }));
+        _cur.Children.Add(Ui.Weak("変えるとパッドをつなぎ直します。裏で入力が届かないときに変えてください"));
+        _cur.Children.Add(Ui.Horizontal(Ui.Button("今の設定でつなぎ直す", app.ReconnectInput)));
 
-        _stack.Children.Add(Ui.Section("割り当て"));
+        Group("割り当て");
         int? count = app.Bus.Latest.MappingCount;
-        _stack.Children.Add(Ui.Text(!File.Exists(app.MappingFile) ? "gamecontrollerdb.txt: 置いていません"
+        _cur.Children.Add(Ui.Text(!File.Exists(app.MappingFile) ? "gamecontrollerdb.txt: 置いていません"
             : count is null ? "gamecontrollerdb.txt: 次の起動で読みます"
             : count >= 0 ? $"gamecontrollerdb.txt: SDL が新しく足した件数 {count}(SDL にもともと入っている物は数えません)" : "割り当てのファイルを読めませんでした"));
         // FR-43: 押したときだけ取りに行く
@@ -69,12 +76,12 @@ public sealed class SettingsTab : UserControl
             later.Start();
             mapNote.Text = _mapNote;
         });
-        _stack.Children.Add(Ui.Horizontal(Ui.Button("データのフォルダを開く", () => ShellOpen.Folder(App.DataDir)), fetch, mapNote));
-        _stack.Children.Add(Ui.Weak("GitHub の SDL_GameControllerDB(zlib ライセンス)から取ります。今のファイルは置き換わります"));
+        _cur.Children.Add(Ui.Horizontal(Ui.Button("データのフォルダを開く", () => ShellOpen.Folder(App.DataDir)), fetch, mapNote));
+        _cur.Children.Add(Ui.Weak("GitHub の SDL_GameControllerDB(zlib ライセンス)から取ります。今のファイルは置き換わります"));
 
         // FR-44
-        _stack.Children.Add(Ui.Section("新しい版"));
-        _stack.Children.Add(Ui.Check("起動したときに新しい版を確かめる", s.UpdateCheckOnStart, v => { s.UpdateCheckOnStart = v; app.SaveSettings(); }));
+        Group("新しい版");
+        _cur.Children.Add(Ui.Check("起動したときに新しい版を確かめる", s.UpdateCheckOnStart, v => { s.UpdateCheckOnStart = v; app.SaveSettings(); }));
         var updNote = Ui.Weak();
         updNote.VerticalAlignment = VerticalAlignment.Center;
         Button? check = null;
@@ -85,36 +92,36 @@ public sealed class SettingsTab : UserControl
             updNote.Text = await app.CheckForUpdate(silent: false);
             check.IsEnabled = true;
         });
-        _stack.Children.Add(Ui.Horizontal(check, updNote));
-        _stack.Children.Add(Ui.Weak("GitHub の公開のページに新しい版があるかだけを確かめます。取ってきて入れ替えることはしません"));
+        _cur.Children.Add(Ui.Horizontal(check, updNote));
+        _cur.Children.Add(Ui.Weak("GitHub の公開のページに新しい版があるかだけを確かめます。取ってきて入れ替えることはしません"));
 
-        _stack.Children.Add(Ui.Section("セッション"));
-        _stack.Children.Add(Ui.Slider("操作の無い時間で区切る(分)", 1, 60, 1, s.SessionIdleMinutes, "0", v => { s.SessionIdleMinutes = (int)v; app.SaveSettings(); }));
+        Group("セッション");
+        _cur.Children.Add(Ui.Slider("操作の無い時間で区切る(分)", 1, 60, 1, s.SessionIdleMinutes, "0", v => { s.SessionIdleMinutes = (int)v; app.SaveSettings(); }));
 
-        _stack.Children.Add(Ui.Section("見た目"));
-        _stack.Children.Add(Ui.Row("テーマ", Ui.Combo([("system", "システムに合わせる"), ("light", "ライト"), ("dark", "ダーク")], s.Theme,
+        Group("見た目");
+        _cur.Children.Add(Ui.Row("テーマ", Ui.Combo([("system", "システムに合わせる"), ("light", "ライト"), ("dark", "ダーク")], s.Theme,
             v => { s.Theme = v; app.SaveSettings(); app.ApplyTheme(); })));
-        _stack.Children.Add(Ui.Weak("メインの画面だけに効きます。パネルの見た目はパネルのタブで変えます"));
+        _cur.Children.Add(Ui.Weak("メインの画面だけに効きます。パネルの見た目はパネルのタブで変えます"));
 
-        _stack.Children.Add(Ui.Section("データ"));
-        _stack.Children.Add(Ui.Horizontal(Ui.Button("データのフォルダを開く", () => ShellOpen.Folder(App.DataDir))));
+        Group("データ");
+        _cur.Children.Add(Ui.Horizontal(Ui.Button("データのフォルダを開く", () => ShellOpen.Folder(App.DataDir))));
         foreach (var file in app.Store.ListBackups())
         {
             string when = File.GetLastWriteTimeUtc(file).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
-            _stack.Children.Add(Ui.Horizontal(Ui.Text(when + "   "), Ui.Button("この写しに戻す", () => Restore(file, when))));
+            _cur.Children.Add(Ui.Row(when, Ui.Horizontal(Ui.Button("この写しに戻す", () => Restore(file, when)))));
         }
 
-        _stack.Children.Add(Ui.Section("注意"));
-        _stack.Children.Add(Ui.Text(Texts.Fullscreen));
+        Group("注意");
+        _cur.Children.Add(Ui.Text(Texts.Fullscreen));
 
-        _stack.Children.Add(Ui.Section("このソフトについて"));
-        _stack.Children.Add(Ui.Text($"PadSight {App.Version}(MIT ライセンス)"));
-        _stack.Children.Add(AboutPage.DoesAndDoesNot());
-        _stack.Children.Add(Ui.Weak(Texts.AntiCheat));
-        _stack.Children.Add(Ui.Section("使っている部品のライセンス"));
-        _stack.Children.Add(new TextBox
+        Group("このソフトについて");
+        _cur.Children.Add(Ui.Text($"PadSight {App.Version}(MIT ライセンス)"));
+        _cur.Children.Add(AboutPage.DoesAndDoesNot(sub: true));
+        _cur.Children.Add(Ui.Weak(Texts.AntiCheat));
+        Group("使っている部品のライセンス");
+        _cur.Children.Add(new TextBox
         {
-            Text = Notices(), IsReadOnly = true, TextWrapping = TextWrapping.Wrap, Height = 240,
+            Text = Notices(), IsReadOnly = true, TextWrapping = TextWrapping.Wrap, Height = 240, Padding = new Thickness(8, 6, 8, 6),
             VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto, FontFamily = new System.Windows.Media.FontFamily("Consolas"), FontSize = 12,
         });
     }
@@ -145,9 +152,15 @@ public sealed class SettingsTab : UserControl
     {
         var app = App.Current;
         var current = Ui.Text(get() ?? "使わない");
-        current.MinWidth = 140;
-        var status = Ui.Weak(app.HotkeyStatus.GetValueOrDefault(id, ""));
-        status.Margin = new Thickness(8, 0, 0, 0);
+        current.FontFamily = new System.Windows.Media.FontFamily("Consolas, Yu Gothic UI");
+        var chip = new Border { Child = current, MinWidth = 150, Padding = new Thickness(10, 5, 10, 5), Margin = new Thickness(0, 2, 12, 2), CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1) };
+        chip.SetResourceReference(Border.BackgroundProperty, "BackgroundBrush");
+        chip.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+        string result = app.HotkeyStatus.GetValueOrDefault(id, "");
+        var status = Ui.Weak(result);
+        status.Margin = new Thickness(4, 0, 0, 0);
+        if (result == "他のアプリが使っています")
+            status.SetResourceReference(TextBlock.ForegroundProperty, "WarningTextBrush");
         var change = Ui.Button("変える", () =>
         {
             _capturing = id;
@@ -176,7 +189,7 @@ public sealed class SettingsTab : UserControl
             app.RegisterHotkeys();
             Build();
         });
-        _stack.Children.Add(Ui.Row(label, Ui.Horizontal(current, change, off, status)));
+        _cur.Children.Add(Ui.Row(label, Ui.Horizontal(chip, change, off, status)));
     }
 
     Action<string?>? _onCaptured;

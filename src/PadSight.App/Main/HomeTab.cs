@@ -15,8 +15,9 @@ public sealed class HomeTab : UserControl
 
     readonly Button _toggle, _arrange, _check;
     readonly TextBlock _checkText = Ui.Weak();
-    readonly ListView _list = new() { MinHeight = 90, MaxHeight = 200 };
+    readonly ListView _list = new() { MaxHeight = 220, Margin = new Thickness(0, 2, 0, 6) };
     readonly TextBlock _empty = Ui.Text("パッドが見つかりません。つないでから数秒待ってください");
+    readonly Border _emptyBox;
     readonly TextBlock _same = Ui.Weak("同じ型が 2 台あります。固定は先につながった方になります");
     readonly RadioButton _lastUsed = new() { Content = "最後に操作", Margin = new Thickness(0, 0, 12, 0) };
     readonly RadioButton _pinned = new() { Content = "固定", Margin = new Thickness(0, 0, 12, 0) };
@@ -48,14 +49,16 @@ public sealed class HomeTab : UserControl
         _toggle = Ui.Primary("パネルを隠す", () => App.Current.Panels.Toggle());
         _arrange = Ui.Button("配置を直す", () => App.Current.Panels.SetArranging(!App.Current.Panels.Arranging));
         _check = Ui.Button("裏の入力を確かめる", StartCheck);
-        _checkText.VerticalAlignment = VerticalAlignment.Center;
+        _checkText.Margin = new Thickness(4, 4, 0, 4);
 
         var grid = new GridView();
-        grid.Columns.Add(new GridViewColumn { Header = "パッド", Width = 330, DisplayMemberBinding = new System.Windows.Data.Binding(nameof(PadRow.Name)) });
-        grid.Columns.Add(new GridViewColumn { Header = "種類", Width = 120, DisplayMemberBinding = new System.Windows.Data.Binding(nameof(PadRow.Kind)) });
-        grid.Columns.Add(new GridViewColumn { Header = "表示", Width = 80, DisplayMemberBinding = new System.Windows.Data.Binding(nameof(PadRow.Shown)) });
-        grid.Columns.Add(new GridViewColumn { Header = "スキン", Width = 200, DisplayMemberBinding = new System.Windows.Data.Binding(nameof(PadRow.Skin)) });
+        grid.Columns.Add(Ui.Column("パッド", nameof(PadRow.Name), 270));
+        grid.Columns.Add(Ui.Column("種類", nameof(PadRow.Kind), 110));
+        grid.Columns.Add(Ui.Column("表示", nameof(PadRow.Shown), 80));
+        grid.Columns.Add(Ui.Column("スキン", nameof(PadRow.Skin), 180));
         _list.View = grid;
+        _emptyBox = Ui.Empty(_empty);
+        _emptyBox.Visibility = Visibility.Collapsed;
 
         var s = App.Current.Settings;
         _lastUsed.IsChecked = s.SelectionMode == "last_used";
@@ -75,32 +78,31 @@ public sealed class HomeTab : UserControl
             }
         });
 
-        var miniBox = new Border { Child = new Viewbox { Child = _mini, Width = 216, Height = 144 }, Background = Draw.Background, CornerRadius = new CornerRadius(8), Padding = new Thickness(8), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 8) };
+        var miniBox = Ui.Picture(new Viewbox { Child = _mini, Width = 216, Height = 144 });
+        miniBox.Margin = new Thickness(0, 10, 0, 4);
 
-        var stack = new StackPanel();
-        // 主な操作は左に、終了(戻せない操作)は右端に離して置く
+        // 上の帯: 主な操作は左に、終了(戻せない操作)は右端に離して置く(§6)。確かめの残り秒数は次の行に出す
         var quit = Ui.Danger("PadSight を終了", () => App.Current.Quit());
-        quit.Margin = new Thickness(8, 4, 0, 4);
-        var top = new DockPanel { LastChildFill = true };
+        quit.Margin = new Thickness(16, 2, 0, 2);
+        quit.VerticalAlignment = VerticalAlignment.Top;
+        var top = new DockPanel { LastChildFill = true, Margin = new Thickness(0, 0, 0, 12) };
         DockPanel.SetDock(quit, Dock.Right);
         top.Children.Add(quit);
         top.Children.Add(Ui.Horizontal(_toggle, _arrange, _check, _checkText));
-        stack.Children.Add(top);
-        stack.Children.Add(Ui.Section("パネルの置き場所"));
-        stack.Children.Add(Ui.Row("まとめて置き直す", Ui.Horizontal(
-            Ui.Button("四隅", () => App.Current.Panels.ArrangePreset("corners")),
-            Ui.Button("左側に縦に並べる", () => App.Current.Panels.ArrangePreset("left")),
-            Ui.Button("右側に縦に並べる", () => App.Current.Panels.ArrangePreset("right"))), 140));
-        stack.Children.Add(Ui.Weak($"1 枚ずつ動かすときは「配置を直す」({App.Current.Settings.HotkeyArrange ?? "ホットキーなし"})のあと、ドラッグで動かします。右下のつまみで大きさも変わります。次の起動でも同じ位置に出ます"));
-        stack.Children.Add(Ui.Row("パッドが無いとき", DemoButton(), 140));
-        stack.Children.Add(Ui.Section("パッド"));
-        stack.Children.Add(_list);
-        stack.Children.Add(_empty);
-        stack.Children.Add(_same);
-        stack.Children.Add(Ui.Row("表示するパッド", Ui.Horizontal(_lastUsed, _pinned, pin), 120));
-        stack.Children.Add(miniBox);
-        stack.Children.Add(Ui.Weak(Texts.HidHide));
-        Content = Ui.Scroll(stack);
+
+        // パッド: 一覧(0 台ならその場所に案内)→ 表示するパッド → 小さいパッド表示(§4.5 の並び)
+        var pads = Ui.Card("パッド", _list, _emptyBox, _same,
+            Ui.Row("表示するパッド", Ui.Horizontal(_lastUsed, _pinned, pin)),
+            miniBox, Ui.Weak(Texts.HidHide));
+        var hint = Ui.Weak($"1 枚ずつ動かすときは「配置を直す」({App.Current.Settings.HotkeyArrange ?? "ホットキーなし"})のあと、ドラッグで動かします。右下のつまみで大きさも変わります。次の起動でも同じ位置に出ます");
+        var place = Ui.Card("パネルの置き場所",
+            Ui.Row("まとめて置き直す", Ui.Horizontal(
+                Ui.Button("四隅", () => App.Current.Panels.ArrangePreset("corners")),
+                Ui.Button("左側に縦に並べる", () => App.Current.Panels.ArrangePreset("left")),
+                Ui.Button("右側に縦に並べる", () => App.Current.Panels.ArrangePreset("right")))),
+            hint,
+            Ui.Row("パッドが無いとき", DemoButton()));
+        Content = Ui.Page(top, pads, place);
         App.Current.Panels.StateChanged += UpdateButtons;
         UpdateButtons();
     }
@@ -171,7 +173,9 @@ public sealed class HomeTab : UserControl
                 return new PadRow(p.Name, KindName(p.Kind), p.InstanceId == s.Pad?.InstanceId ? "表示中" : "—",
                     manual == "auto" ? $"自動({SkinName(skin)})" : SkinName(skin), p.Guid, p.InstanceId);
             }).ToList();
-            _empty.Visibility = s.Pads.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            // 0 台のときは、空の表の代わりに案内を出す(§4.5「一覧の場所に」)
+            _emptyBox.Visibility = s.Pads.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            _list.Visibility = s.Pads.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
             _same.Visibility = s.Pads.GroupBy(p => p.Guid).Any(g => g.Count() > 1) ? Visibility.Visible : Visibility.Collapsed;
         }
         // 一覧で選んだ行のパッドを描く(パネルの表示は変えない)。選んでいなければ表示中のパッド
