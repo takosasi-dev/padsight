@@ -1,4 +1,4 @@
-// S4 統計(画面設計書 §4.8・仕様書 FR-26〜FR-28)。期間の合計、セッションの表(新しい順)、
+// S4 統計(画面設計書 §4.8・仕様書 FR-26〜FR-28・FR-38・FR-47)。期間の合計、セッションの表(新しい順)、パッドごとの通算とその絵、
 // 今のセッションを区切る、GrindLog 向けの CSV の書き出し。週は月曜始まり、日の境目はローカルの 0 時、0 時をまたぐ物は始まった日に数える。
 using System.Globalization;
 using System.IO;
@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using Microsoft.Win32;
+using PadSight.App.Panels;
 using PadSight.Core;
 
 namespace PadSight.App.Main;
@@ -14,7 +15,7 @@ namespace PadSight.App.Main;
 public sealed class StatsTab : UserControl
 {
     sealed record Row(string Start, string Length, string Inputs, string PerMin, string Peak, string Peak1, string Top);
-    sealed record PadTotalRow(string Name, string Kind, string Inputs, string Top, string LastUsed);
+    sealed record PadTotalRow(string Name, string Kind, string Inputs, string Top, string LastUsed, string Guid, PadTotal Total);
 
     readonly ComboBox _period;
     readonly Button _split, _export;
@@ -25,8 +26,15 @@ public sealed class StatsTab : UserControl
     readonly Button _openFolder;
     readonly ListView _list = new() { MinHeight = 200 };
     readonly TextBlock _empty = Ui.Weak("この期間の記録はありません");
-    readonly ListView _padList = new() { MinHeight = 80 };
+    readonly ListView _padList = new() { MinHeight = 80, VerticalAlignment = VerticalAlignment.Top }; // 横の絵の高さまで伸びないように
     readonly TextBlock _padEmpty = Ui.Weak("まだ記録がありません");
+    // FR-47: 選んだパッドの絵(重ねるパネルとは別の PadView)。パネルの色で描くので、地はパネルの地の色にする
+    readonly PadView _heat = new();
+    readonly TextBlock _heatTop = Ui.Text();
+    readonly TextBlock _heatNone = Ui.Weak("このパッドは絵がありません");
+    readonly Border _heatBox;
+    readonly StackPanel _heatPanel = new() { Margin = new Thickness(16, 0, 0, 0), Visibility = Visibility.Collapsed };
+    string? _selectedGuid;
     string _periodValue = "week";
     List<SessionRecord> _all = [];
     List<SessionRecord> _inPeriod = [];
@@ -64,8 +72,13 @@ public sealed class StatsTab : UserControl
             ("多いボタン", nameof(PadTotalRow.Top), 240.0), ("最後に使った日", nameof(PadTotalRow.LastUsed), 110.0) })
             padGrid.Columns.Add(new GridViewColumn { Header = h, Width = w, DisplayMemberBinding = new Binding(p) });
         _padList.View = padGrid;
+        _padList.SelectionChanged += (_, _) => ShowHeat();
+        _heatBox = new Border { Child = new Viewbox { Child = _heat, Width = 360, Height = 240 }, Background = Draw.Background, CornerRadius = new CornerRadius(8), Padding = new Thickness(8), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 0) };
+        _heatPanel.Children.Add(_heatTop);
+        _heatPanel.Children.Add(_heatBox);
+        _heatPanel.Children.Add(_heatNone);
         stack.Children.Add(Ui.Section("パッドごとの通算"));
-        stack.Children.Add(_padList);
+        stack.Children.Add(Ui.Horizontal(_padList, _heatPanel)); // 表の右に絵。幅が足りなければ下へ折り返す
         stack.Children.Add(_padEmpty);
         Content = Ui.Scroll(stack);
         App.Current.Sessions.Appended += () => Dispatcher.BeginInvoke(Reload);
@@ -128,15 +141,50 @@ public sealed class StatsTab : UserControl
     void RefreshPads()
     {
         var inv = CultureInfo.InvariantCulture;
-        var pads = App.Current.Sessions.ReadPadTotals().Pads.Values.OrderByDescending(p => p.Inputs).ToList();
-        _padList.ItemsSource = pads.Select(p => new PadTotalRow(
-            p.Name,
-            Enum.TryParse<PadKind>(p.Kind, out var k) ? HomeTab.KindName(k) : p.Kind,
-            p.Inputs.ToString("N0", inv),
-            string.Join(" / ", p.Buttons.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).Take(3)
-                .Select(kv => $"{Labels.ForRecord(kv.Key, p.Kind)} {kv.Value.ToString("N0", inv)}")),
-            p.LastUsedUtc.ToLocalTime().ToString("yyyy/MM/dd", inv))).ToList();
+        var pads = App.Current.Sessions.ReadPadTotals().Pads.OrderByDescending(kv => kv.Value.Inputs).ToList();
+        string? keep = _selectedGuid; // 表を作り直すと選択が外れるので、同じパッドを選び直す
+        var rows = pads.Select(x => new PadTotalRow(
+            x.Value.Name,
+            Enum.TryParse<PadKind>(x.Value.Kind, out var k) ? HomeTab.KindName(k) : x.Value.Kind,
+            x.Value.Inputs.ToString("N0", inv),
+            string.Join(" / ", x.Value.Buttons.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).Take(3)
+                .Select(kv => $"{Labels.ForRecord(kv.Key, x.Value.Kind)} {kv.Value.ToString("N0", inv)}")),
+            x.Value.LastUsedUtc.ToLocalTime().ToString("yyyy/MM/dd", inv),
+            x.Key, x.Value)).ToList();
+        _padList.ItemsSource = rows;
+        _padList.SelectedItem = rows.FirstOrDefault(r => r.Guid == keep);
         _padEmpty.Visibility = pads.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ShowHeat();
+    }
+
+    /// <summary>FR-47: 選んだパッドのスキンの絵に、ボタン別の通算を濃さで出す。スキンはパネルと同じ選び方(種類か、GUID ごとに手で選んだ物)。</summary>
+    void ShowHeat()
+    {
+        var row = _padList.SelectedItem as PadTotalRow;
+        _selectedGuid = row?.Guid;
+        if (row is null)
+        {
+            _heatPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var settings = App.Current.Settings;
+        var p = row.Total;
+        var kind = Enum.TryParse<PadKind>(p.Kind, out var k) ? k : PadKind.Generic;
+        // 保存した物には種類しか無いので、Labels.ForRecord と同じ形の仮の PadInfo を作る。
+        // 持っているボタンは数えた鍵から決める(共有・タッチパッド・パドルは 1 回でも押していれば描く)
+        var buttons = p.Buttons.Where(kv => kv.Value > 0).Select(kv => Enum.TryParse<PadButton>(kv.Key, out var b) ? (PadButton?)b : null)
+            .OfType<PadButton>().ToHashSet();
+        var pad = new PadInfo(0, row.Guid, p.Name, kind, buttons, kind != PadKind.Unmapped);
+        var skin = Labels.ChooseSkin(pad, settings.Devices.GetValueOrDefault(row.Guid));
+        var top = ButtonHeat.Top(p.Buttons);
+        _heatTop.Text = top is { } t ? $"よく押すボタン: {Labels.For(t.Key, skin, settings.LabelStyle, pad)} {t.Count.ToString("N0", CultureInfo.InvariantCulture)}" : "";
+        _heatTop.Visibility = top is null ? Visibility.Collapsed : Visibility.Visible;
+        bool picture = skin != Skin.Unmapped;
+        _heatBox.Visibility = picture ? Visibility.Visible : Visibility.Collapsed;
+        _heatNone.Visibility = picture ? Visibility.Collapsed : Visibility.Visible;
+        if (picture)
+            _heat.ShowHeat(skin, pad, settings, ButtonHeat.Intensities(p.Buttons));
+        _heatPanel.Visibility = Visibility.Visible;
     }
 
     void Refresh()
