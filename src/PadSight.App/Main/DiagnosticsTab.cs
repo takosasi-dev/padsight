@@ -228,13 +228,3 @@ public sealed class DiagnosticsTab : UserControl
             + "\n報告の間隔は SDL が受け取った間隔の参考値です。パッドの実際の報告の間隔と同じとは限りません";
     }
 }
-
-/// <summary>まだ作っていないページ(統合の途中だけ使う)。</summary>
-sealed class PlaceholderPage(string title) : IDiagPage
-{
-    public string Title => title;
-    public FrameworkElement View { get; } = Ui.Card(title, Ui.Weak("準備中です"));
-    public bool WantsSamples => false;
-    public void Render(DiagContext c) { }
-    public void Cancel() { }
-}
