@@ -67,6 +67,7 @@ public class DiagTriggerIdleTests
         Assert.Equal(1.0f, t.Max);
         Assert.Equal(0.2f, t.Current);
         Assert.Equal(4, t.History.Count);
+        Assert.Equal(4, t.Count);
         Assert.Equal(0.5f, t.History[1].Value);
         Assert.True(t.History[0].Ns < t.History[3].Ns);
     }

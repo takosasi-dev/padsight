@@ -42,6 +42,7 @@ public sealed class TriggerPage : IDiagPage
     bool _start; // 押されたら次の描画で始める(始めの時刻に描画の時刻を使うため)
 
     uint? _padId;
+    ulong _lastRenderNs;
     string _labelsKey = "";
 
     public TriggerPage()
@@ -101,6 +102,12 @@ public sealed class TriggerPage : IDiagPage
             foreach (var l in _lanes) l.Trace.Reset();
             Cancel();
         }
+        else if (c.NowNs > _lastRenderNs + Values.NsPerSecond / 2)
+        {
+            // ページを離れていた間は値が積まれていない(古い値のままの線を出さない)。今の値から描き直す
+            foreach (var l in _lanes) l.Trace.Reset();
+        }
+        _lastRenderNs = c.NowNs;
         UpdateLabels(pad);
         _measureBtn.IsEnabled = pad is not null;
 
@@ -111,8 +118,8 @@ public sealed class TriggerPage : IDiagPage
         {
             (liveL, liveR) = (lv!.LeftTrigger, lv.RightTrigger);
             // 引いたまま止めているトリガーからはイベントが来ないので、最初の 1 点は今の値から取る
-            if (_lanes[0].Trace.History.Count == 0) _lanes[0].Trace.Add(c.NowNs, liveL);
-            if (_lanes[1].Trace.History.Count == 0) _lanes[1].Trace.Add(c.NowNs, liveR);
+            if (_lanes[0].Trace.Count == 0) _lanes[0].Trace.Add(c.NowNs, liveL);
+            if (_lanes[1].Trace.Count == 0) _lanes[1].Trace.Add(c.NowNs, liveR);
         }
         foreach (var s in c.Samples)
         {

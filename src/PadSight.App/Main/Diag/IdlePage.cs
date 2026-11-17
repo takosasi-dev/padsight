@@ -85,7 +85,7 @@ public sealed class IdlePage : IDiagPage
             _note,
             _padWarn,
             _live,
-            Ui.Weak("監視中にこのページや診断のタブを離れる、または PadSight の窓を閉じると、監視は取り消されます(結果は出ません)。終わるまで、このページを開いたままにしてください"));
+            Ui.Weak("監視中にこのページや診断のタブを離れる、Esc を押す、または PadSight の窓を閉じると、監視は取り消されます(結果は出ません)。終わるまで、このページを開いたままにしてください"));
 
         var tiles = new WrapPanel { Margin = new Thickness(0, 4, 0, 0) };
         tiles.Children.Add(Ui.Stat("スティックの揺れ", out _drift));
@@ -132,9 +132,13 @@ public sealed class IdlePage : IDiagPage
             _startRequested = false;
             if (c.Pad is not null) Start(c);
         }
-        var sum = _monitor.Summary;
-        if (!sum.Running)
+        if (!_monitor.Running)
+        {
+            string why = c.Pad is null ? "パッドが見つかりません。パッドをつなぐと始められます" : "";
+            if (_padWarn.Text != why) Ui.SetText(_padWarn, why);
             return;
+        }
+        var sum = _monitor.Summary;
 
         // 切断と再接続(スナップショットのパッドの一覧で見る)
         if (!_gone && !c.S.Pads.Any(p => p.InstanceId == _padId))
@@ -186,7 +190,7 @@ public sealed class IdlePage : IDiagPage
         _monitor.Reset();
         _record = null;
         ShowIdle();
-        Ui.SetText(_note, "ページを離れたので、監視を取り消しました");
+        Ui.SetText(_note, "監視を取り消しました(ページやタブを離れた、Esc を押した、または窓を閉じたため)");
     }
 
     void Start(DiagContext c)

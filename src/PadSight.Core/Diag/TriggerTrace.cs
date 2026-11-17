@@ -11,6 +11,9 @@ public sealed class TriggerTrace(bool right, int capacity = 8192)
     public float Max { get; private set; }
     public float Current { get; private set; }
 
+    /// <summary>積んでいる値の数(History と違って写しを作らない)。</summary>
+    public int Count => _count;
+
     /// <summary>古い順の値。値が前と同じイベントは積まない(ほかの軸の動きで来たイベント)。</summary>
     public IReadOnlyList<(ulong Ns, float Value)> History
     {
