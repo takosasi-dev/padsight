@@ -52,7 +52,7 @@ public sealed class DiagnosticsTab : UserControl
     {
         Pages =
         [
-            new PlaceholderPage("ボタン"),
+            new Diag.ButtonsPage(),
             new StickPage(),
             new PlaceholderPage("トリガー"),
             new PlaceholderPage("振動"),
