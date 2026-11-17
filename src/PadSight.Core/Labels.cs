@@ -84,9 +84,10 @@ public static class Labels
             case PadButton.RightStick: return col is Column.Xbox or Column.Switch ? "RS" : "R3";
             case PadButton.Misc1: return col switch { Column.Xbox => "共有", Column.PlayStation => "マイク", Column.Switch => "キャプチャ", _ => "M1" };
             case PadButton.Touchpad: return "タッチパッド";
+            // SDL の並びは RIGHT_PADDLE1・LEFT_PADDLE1・RIGHT_PADDLE2・LEFT_PADDLE2。Elite の刻印は右上 P1・右下 P2・左上 P3・左下 P4
             case PadButton.Paddle1: return "P1";
-            case PadButton.Paddle2: return "P2";
-            case PadButton.Paddle3: return "P3";
+            case PadButton.Paddle2: return "P3";
+            case PadButton.Paddle3: return "P2";
             case PadButton.Paddle4: return "P4";
             case PadButton.DpadUp: return "↑";
             case PadButton.DpadDown: return "↓";

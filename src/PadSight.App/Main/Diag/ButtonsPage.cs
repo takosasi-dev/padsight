@@ -232,9 +232,9 @@ public sealed class ButtonsPage : IDiagPage
         if (key == _coverageKey)
             return;
         _coverageKey = key;
-        _coverageComplete = st.Done == st.Items.Count;
+        _coverageComplete = st.AllDone; // 拡張(無いことがある)を待ち続けて、細かい値を積み続けない
 
-        if (_tileByKey.Count != st.Items.Count)
+        if (_tiles.Children.Count != st.Items.Count)
         {
             _tiles.Children.Clear();
             foreach (var i in st.Items)
@@ -473,7 +473,7 @@ public sealed class ButtonsPage : IDiagPage
         if (c.Profile?.Buttons.FirstOrDefault(b => b.Key == key) is { } pb)
             return pb.Label;
         if (Enum.TryParse<PadButton>(key, out var b) && PaddleMapper.IsPaddle(b))
-            return $"パドル {(b - PadButton.Paddle1 + 1).ToString(Inv)}(SDL)";
+            return $"{Labels.For(key, Skin.Xbox, "pad", null)}(SDL)";
         var settings = App.Current.Settings;
         return c.Pad is { } pad ? Labels.For(key, Labels.ChooseSkin(pad, settings.Devices.GetValueOrDefault(pad.Guid)), settings.LabelStyle, pad) : key;
     }

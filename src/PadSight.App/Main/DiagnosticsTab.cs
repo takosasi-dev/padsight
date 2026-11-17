@@ -45,7 +45,10 @@ public sealed class DiagnosticsTab : UserControl
     readonly List<DiagSample> _drain = [];
     readonly List<DiagSample> _mine = [];
     readonly Dictionary<string, string> _profileByGuid = []; // 手で選んだプロファイル(起動している間だけ覚える)
-    string _padsKey = "";
+    IReadOnlyList<PadInfo>? _padsSeen; // スナップショットのパッドの一覧は、増減が無ければ同じ物が来る
+    string? _wantGuid;                 // 利用者が選んだパッド。つなぎ直して番号が変わっても、同じ GUID が戻れば選び直す
+    bool _refreshing;
+    string _infoKey = "";
     bool _tapOn;
     // 報告の間隔の参考値(§9.20)。ページが測っている間の DiagSample と、参考値がまだ無いうちにスティックが動いた直後の 2 秒だけ積む分で数える
     // 出すのはそのパッドで測れた一番短い間隔(イベントは値が変わったときだけ来るので、少なく数えることはあっても多くは数えない)
@@ -78,8 +81,17 @@ public sealed class DiagnosticsTab : UserControl
         };
         _nav.SelectedIndex = 0;
 
+        _pad.SelectionChanged += (_, _) =>
+        {
+            if (_refreshing)
+                return;
+            _wantGuid = SelectedPad?.Guid;
+            RefreshProfiles(); // 機種の欄を、選んだパッドの物に合わせる
+        };
         _profile.SelectionChanged += (_, _) =>
         {
+            if (_refreshing)
+                return;
             if (SelectedPad is { } pad && _profile.SelectedItem is ComboBoxItem { Tag: string id })
             {
                 if (id == "auto") _profileByGuid.Remove(pad.Guid); else _profileByGuid[pad.Guid] = id;
@@ -114,10 +126,7 @@ public sealed class DiagnosticsTab : UserControl
     public void Render(PadSnapshot s, ulong nowNs)
     {
         RefreshPads(s);
-        var pad = SelectedPad;
-        // 選んだパッドが今もあるか(外れたら情報を消す)
-        if (pad is not null && !s.Pads.Any(p => p.InstanceId == pad.InstanceId))
-            pad = null;
+        var pad = SelectedPad; // RefreshPads が今の一覧から選び直しているので、外れたパッドは残らない
         var profile = pad is null ? null : PadProfiles.ById(_profileByGuid.GetValueOrDefault(pad.Guid)) ?? PadProfiles.For(pad);
 
         var page = CurrentPage;
@@ -132,7 +141,15 @@ public sealed class DiagnosticsTab : UserControl
                 foreach (var d in _drain)
                     if (d.PadId == pad.InstanceId) { _mine.Add(d); _rate.Feed(d.Ns); }
         }
-        _info.Text = pad is null ? "パッドが見つかりません" : Info(pad, s, RateText());
+        // 上の帯の文字は、中身が変わったときだけ作り直す(D-9)
+        string rate = RateText();
+        var power = pad is not null && s.Power.TryGetValue(pad.InstanceId, out var pw) ? pw : null;
+        string infoKey = pad is null ? "" : $"{pad.InstanceId}|{power}|{rate}";
+        if (infoKey != _infoKey)
+        {
+            _infoKey = infoKey;
+            _info.Text = pad is null ? "パッドが見つかりません" : Info(pad, power, rate);
+        }
         page?.Render(new DiagContext(s, nowNs, pad, profile, page.WantsSamples ? _mine : []));
     }
 
@@ -153,21 +170,27 @@ public sealed class DiagnosticsTab : UserControl
 
     void RefreshPads(PadSnapshot s)
     {
-        string key = string.Join("|", s.Pads.Where(p => p.IsMapped).Select(p => p.InstanceId + p.Name));
-        if (key == _padsKey)
+        if (ReferenceEquals(s.Pads, _padsSeen))
             return;
-        _padsKey = key;
+        _padsSeen = s.Pads;
         uint? sel = SelectedPad?.InstanceId;
+        _refreshing = true;
         _pad.Items.Clear();
         foreach (var p in s.Pads.Where(p => p.IsMapped))
             _pad.Items.Add(new ComboBoxItem { Content = p.Name, Tag = p });
-        int idx = _pad.Items.Cast<ComboBoxItem>().ToList().FindIndex(i => (i.Tag as PadInfo)?.InstanceId == sel);
-        _pad.SelectedIndex = idx >= 0 ? idx : _pad.Items.Count > 0 ? 0 : -1;
+        var items = _pad.Items.Cast<ComboBoxItem>().Select(i => (PadInfo)i.Tag).ToList();
+        // 1. 今選んでいるパッド 2. 利用者が選んだ GUID(つなぎ直して番号が変わった) 3. 最初のパッド
+        int idx = items.FindIndex(p => p.InstanceId == sel);
+        if (idx < 0 && _wantGuid is not null)
+            idx = items.FindIndex(p => p.Guid == _wantGuid);
+        _pad.SelectedIndex = idx >= 0 ? idx : items.Count > 0 ? 0 : -1;
+        _refreshing = false;
         RefreshProfiles();
     }
 
     void RefreshProfiles()
     {
+        _refreshing = true;
         _profile.Items.Clear();
         var pad = SelectedPad;
         _profile.Items.Add(new ComboBoxItem { Content = pad is null ? "自動" : $"自動({PadProfiles.For(pad).Name})", Tag = "auto" });
@@ -175,6 +198,7 @@ public sealed class DiagnosticsTab : UserControl
             _profile.Items.Add(new ComboBoxItem { Content = p.Name, Tag = p.Id });
         string want = pad is null ? "auto" : _profileByGuid.GetValueOrDefault(pad.Guid, "auto");
         _profile.SelectedIndex = Math.Max(0, _profile.Items.Cast<ComboBoxItem>().ToList().FindIndex(i => (string)i.Tag == want));
+        _refreshing = false;
     }
 
     /// <summary>参考値がまだ無く、選んだパッドのスティックが今動いた(2 秒以内)ときだけ真。測れたら止める(D-9: 見ているだけの間は積まない)。</summary>
@@ -215,12 +239,12 @@ public sealed class DiagnosticsTab : UserControl
         return _rateText;
     }
 
-    static string Info(PadInfo p, PadSnapshot s, string rate)
+    static string Info(PadInfo p, PadPower? pw, string rate)
     {
         var inv = CultureInfo.InvariantCulture;
         string conn = p.Connection switch { "Wired" => "USB", "Wireless" => "ワイヤレス", _ => "つなぎ方は不明" };
         string ids = p.Vendor != 0 ? $"VID {p.Vendor.ToString("X4", inv)} / PID {p.Product.ToString("X4", inv)}" : "VID/PID 不明";
-        string power = s.Power.TryGetValue(p.InstanceId, out var pw) ? pw.Power switch
+        string power = pw is not null ? pw.Power switch
         {
             "OnBattery" => pw.Percent >= 0 ? $"電池 {pw.Percent}%" : "電池",
             "Charging" => pw.Percent >= 0 ? $"充電中 {pw.Percent}%" : "充電中",

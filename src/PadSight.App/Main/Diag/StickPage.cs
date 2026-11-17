@@ -186,6 +186,7 @@ public sealed class StickPage : IDiagPage
         _res?.Start();
         _lin?.Start();
         _plot.Children.Clear();
+        _liveKey = default; // 図を消したので、次の測定中の描画は必ず描く
         _outline.Points = [];
         DrawBase();
     }
@@ -202,6 +203,7 @@ public sealed class StickPage : IDiagPage
         _values.Clear();
         _guide.Visibility = Visibility.Collapsed;
         _plot.Children.Clear();
+        _liveKey = default; // 図を消したので、次の測定中の描画は必ず描く
         _outline.Points = [];
         _shown = Test.None;
         _resultNote.Text = "測る物を選ぶと、ここに結果が出ます。測った結果は「この結果を残す」で履歴に残せます";
@@ -224,6 +226,7 @@ public sealed class StickPage : IDiagPage
         _shownBins = null;
         _values.Clear();
         _plot.Children.Clear();
+        _liveKey = default; // 図を消したので、次の測定中の描画は必ず描く
         _outline.Points = [];
         DrawBase();
     }
@@ -288,7 +291,8 @@ public sealed class StickPage : IDiagPage
                 ShowGuide($"スティックを外周に沿って、ゆっくり 3 周回してください。残り {left} 秒",
                     "いちばん外まで倒したまま回します。速く回すと区切りが抜けることがあります", 1 - rest / (double)OuterNs);
                 var o = StickDiagnostics.Outer(_values);
-                DrawOutline(o.BinMax);
+                if (LiveChanged(Test.Outer, _values.Count, 0))
+                    DrawOutline(o.BinMax);
                 if (rest == 0)
                     FinishOuter(o);
                 break;
@@ -299,7 +303,8 @@ public sealed class StickPage : IDiagPage
                 var sr = _snap.Result;
                 ShowGuide($"スティックをいっぱいに倒して、指をはじくように離してください。あと {Releases - sr.Releases} 回",
                     "1. 端までしっかり倒す   2. 押し戻さずに指を外す   3. 中央で止まるのを待つ\n向きを変えながら 5 回くり返すと、離したときの振れと戻る時間を測ります", sr.Releases / (double)Releases);
-                DrawSnapback(sr);
+                if (LiveChanged(Test.Snapback, sr.Releases, 0))
+                    DrawSnapback(sr);
                 if (sr.Complete)
                     FinishSnapback();
                 else if (rest == 0)
@@ -321,7 +326,8 @@ public sealed class StickPage : IDiagPage
                         "大きく倒す必要はありません。少しずつ、止めずに動かします", 1 - r5 / (double)ResolutionNs);
                     if (r5 == 0) _res.Finish(); // 動かすのをやめて値が届かなくなっても、5 秒で終える
                 }
-                DrawResolution(_res.Trace);
+                if (LiveChanged(Test.Resolution, _res.Trace.Count, 0))
+                    DrawResolution(_res.Trace);
                 if (_res.Result.Complete)
                     FinishResolution();
                 else if (rest == 0)
@@ -332,7 +338,8 @@ public sealed class StickPage : IDiagPage
                 var lr = _lin.Result;
                 ShowGuide("中央から真横へ、一定の速さでゆっくり倒してください。端まで倒すと終わります",
                     "2〜3 秒かけて端まで倒すのが目安です。速さのむらも線に出ます", lr.Curve.Count == 0 ? 0 : lr.Curve[^1].Y / LinearityTest.EndRadius);
-                DrawLinearity(lr, done: false);
+                if (LiveChanged(Test.Linearity, lr.Curve.Count, 0))
+                    DrawLinearity(lr, done: false);
                 if (lr.Complete)
                     FinishLinearity();
                 else if (rest == 0)
@@ -477,6 +484,7 @@ public sealed class StickPage : IDiagPage
         _resultNote.Visibility = Visibility.Collapsed;
         SetVerdict(text, "WarningBrush");
         _plot.Children.Clear();
+        _liveKey = default; // 図を消したので、次の測定中の描画は必ず描く
         _outline.Points = [];
         _shown = Test.None;
         DrawBase();
@@ -631,7 +639,7 @@ public sealed class StickPage : IDiagPage
     void DrawDot(StickValue v)
     {
         _dot.Visibility = Chart ? Visibility.Collapsed : Visibility.Visible;
-        if (_running && _test == Test.Drift)
+        if (_running && _test == Test.Drift && LiveChanged(Test.Drift, _values.Count, _shownDrift is null ? 0 : 1))
             DrawDrift();
         double z = Zoom();
         double x = Math.Clamp(C + v.X * R * z, 4, Fig - 4), y = Math.Clamp(C - v.Y * R * z, 4, Fig - 4);
@@ -639,6 +647,18 @@ public sealed class StickPage : IDiagPage
     }
 
     /// <summary>触っていないときの位置の散らばりを拡大して描く(平均の位置に十字、測り終えたら最大の円)。</summary>
+    // 測っている間の図は、描く中身(点や回数の数)が変わったときだけ作り直す(D-9。毎フレーム作り直すと 1 回 数十〜数百 KB 確保していた)
+    (Test Test, int A, int B) _liveKey;
+
+    bool LiveChanged(Test test, int a, int b)
+    {
+        var key = (test, a, b);
+        if (key == _liveKey)
+            return false;
+        _liveKey = key;
+        return true;
+    }
+
     void DrawDrift()
     {
         _plot.Children.Clear();

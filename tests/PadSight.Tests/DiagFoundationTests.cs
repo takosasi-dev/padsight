@@ -87,4 +87,12 @@ public class DiagFoundationTests
         Assert.Equal([new KeyValuePair<string, double>("平均", 0.9)], back.Values);
         Assert.Equal([0.9, 0.0, 1.0], back.Shape); // データ無しは 0
     }
+
+    [Fact]
+    public void PaddleLabels_FollowTheEliteMarkings()
+    {
+        // SDL の並びは右上・左上・右下・左下。刻印は右上 P1・右下 P2・左上 P3・左下 P4
+        string L(PadButton b) => Labels.For(b.ToString(), Skin.Xbox, "pad", null);
+        Assert.Equal(["P1", "P3", "P2", "P4"], [L(PadButton.Paddle1), L(PadButton.Paddle2), L(PadButton.Paddle3), L(PadButton.Paddle4)]);
+    }
 }

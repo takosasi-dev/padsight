@@ -85,8 +85,9 @@ public sealed class PadView : PanelView
 
     static readonly El[] Paddles =
     [
-        new(K.Rect, "Paddle1", 128, 208, 24, 16), new(K.Rect, "Paddle2", 156, 208, 24, 16),
-        new(K.Rect, "Paddle3", 184, 208, 24, 16), new(K.Rect, "Paddle4", 212, 208, 24, 16),
+        // 左の 2 本(P3・P4)と右の 2 本(P1・P2)。SDL の Paddle2 が P3、Paddle3 が P2(Labels と同じ)
+        new(K.Rect, "Paddle2", 128, 208, 24, 16), new(K.Rect, "Paddle4", 156, 208, 24, 16),
+        new(K.Rect, "Paddle1", 184, 208, 24, 16), new(K.Rect, "Paddle3", 212, 208, 24, 16),
     ];
 
     static readonly El[] XboxLayout =

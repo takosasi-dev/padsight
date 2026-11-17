@@ -409,6 +409,7 @@ public sealed class SdlInputThread
             return;
         }
         _open[id] = (h, true);
+        _lastPowerNs = 0; // 次の区切り(250 ミリ秒以内)で電池を問い合わせる
         var info = DeviceCatalog.Gamepad(id, h);
         _log($"パッドがつながった: {info.TypeName} {Short(info.Guid)}");
         _engine.Apply(new PadAdded(ts, id, info));
