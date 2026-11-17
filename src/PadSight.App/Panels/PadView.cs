@@ -172,17 +172,35 @@ public sealed class PadView : PanelView
         public TranslateTransform? Knob;
         /// <summary>トリガーの塗りの高さの最大(形の高さ)。</summary>
         public double Span;
+        /// <summary>FR-49 の光の輪(部品の外側の帯を 3 枚重ねた物)と、広げる変換。押せない部品は null。</summary>
+        public Canvas? Glow;
+        public ScaleTransform? GlowScale;
+        public Size GlowSize;
+        /// <summary>前の Render で押していたか。光を付けた時刻(0 は光っていない)。</summary>
+        public bool WasDown;
+        public ulong FlashAt;
     }
 
     /// <summary>スティックの頭が動く距離(土台の半径に対する割合)。頭の半径は土台の 0.56。</summary>
     const double Travel = 0.44, KnobRatio = 0.56;
 
+    /// <summary>FR-49: 光の長さ。帯の幅と濃さ(内側ほど濃い。重ねると縁の近くが一番明るい)、消えるまでに外へ広がる幅。</summary>
+    const ulong FlashNs = 180 * Values.NsPerMs;
+    static readonly (double Width, double Opacity)[] GlowBands = [(9, 0.16), (5.5, 0.3), (3, 0.65)];
+    const double GlowSpread = 3;
+
     readonly List<Part> _parts = [];
     readonly List<OutlineText> _raw = [];
     string _builtFor = "";
     Skin _lastSkin = Skin.Generic;
+    // 作り直した直後の Render は押している物を覚えるだけにして光らせない(スキンや表記を変えただけで光らないように)
+    bool _primed;
+    bool _flashing;
 
     public PadView() : base(360, 240) { }
+
+    /// <summary>光の輪が消えきるまでは毎フレーム描く(D-9。光っていなければ版が変わったときだけ)。</summary>
+    public override bool Animating(PadSnapshot s) => _flashing;
 
     public override void Render(PadSnapshot s, Settings settings, ulong nowNs)
     {
@@ -198,7 +216,7 @@ public sealed class PadView : PanelView
         if (skin == Skin.Unmapped)
             RenderRaw(s, settings);
         else
-            RenderParts(s, settings);
+            RenderParts(s, settings, nowNs);
     }
 
     void Build(Skin skin, PadInfo? pad, Settings settings)
@@ -206,6 +224,7 @@ public sealed class PadView : PanelView
         Canvas.Children.Clear();
         _parts.Clear();
         _raw.Clear();
+        _primed = _flashing = false;
         if (skin == Skin.Unmapped)
         {
             BuildRaw(pad);
@@ -245,6 +264,7 @@ public sealed class PadView : PanelView
             case K.Trigger:
             {
                 var b = el.G!.Bounds;
+                AddGlow(part, el.G);
                 Canvas.Children.Add(new Path { Data = el.G, Fill = Draw.Inset, Stroke = Draw.Line, StrokeThickness = Draw.Thin, StrokeLineJoin = PenLineJoin.Round });
                 // 塗りは形で切り抜いた入れ物の中で、下から伸ばす(写した形は自分の変換を持つので、組にして動かす)
                 var clip = new GeometryGroup { Children = { el.G }, Transform = new TranslateTransform(-b.X, -b.Y) };
@@ -261,6 +281,7 @@ public sealed class PadView : PanelView
                 break;
             }
             case K.Bumper:
+                AddGlow(part, el.G!);
                 part.Shape = new Path { Data = el.G, StrokeLineJoin = PenLineJoin.Round };
                 Canvas.Children.Add(part.Shape);
                 part.Label = new TextBlock
@@ -274,15 +295,21 @@ public sealed class PadView : PanelView
                 Canvas.Children.Add(new Ellipse { Width = el.W * 2, Height = el.W * 2, Fill = Draw.Inset, Stroke = Draw.Line, StrokeThickness = Draw.Thin }.At(el.X - el.W, el.Y - el.W));
                 double kr = el.W * KnobRatio;
                 part.Knob = new TranslateTransform();
+                if (el.Kind == K.Stick) // 押し込みの光は頭と一緒に動く
+                    AddGlow(part, new EllipseGeometry(new Point(el.X, el.Y), kr, kr), part.Knob);
                 part.Shape = new Ellipse { Width = kr * 2, Height = kr * 2, RenderTransform = part.Knob }.At(el.X - kr, el.Y - kr);
                 Canvas.Children.Add(part.Shape);
                 if (el.Kind == K.Stick) // 頭の上の滑り止めの輪。頭と一緒に動く
                     Canvas.Children.Add(new Ellipse { Width = kr * 1.1, Height = kr * 1.1, Stroke = Draw.Faint, StrokeThickness = 1.5, RenderTransform = part.Knob, IsHitTestVisible = false }.At(el.X - kr * 0.55, el.Y - kr * 0.55));
                 break;
             default:
+            {
+                var r = new Rect(el.X, el.Y, el.W, el.H);
+                double rad = el.Key.StartsWith("Dpad", StringComparison.Ordinal) ? 2 : 4;
+                AddGlow(part, el.Kind == K.Circle ? new EllipseGeometry(r) : new RectangleGeometry(r, rad, rad));
                 part.Shape = el.Kind == K.Circle
                     ? new Ellipse { Width = el.W, Height = el.H }
-                    : new Rectangle { Width = el.W, Height = el.H, RadiusX = el.Key.StartsWith("Dpad", StringComparison.Ordinal) ? 2 : 4, RadiusY = el.Key.StartsWith("Dpad", StringComparison.Ordinal) ? 2 : 4 };
+                    : new Rectangle { Width = el.W, Height = el.H, RadiusX = rad, RadiusY = rad };
                 Canvas.Children.Add(part.Shape.At(el.X, el.Y));
                 if (el.Key.StartsWith("Dpad", StringComparison.Ordinal))
                 {
@@ -301,17 +328,75 @@ public sealed class PadView : PanelView
                     Canvas.Children.Add(part.Label.At(el.X, el.Y));
                 }
                 break;
+            }
         }
         return part;
     }
 
-    void RenderParts(PadSnapshot s, Settings settings)
+    /// <summary>FR-49 の光の輪を、部品の形のすぐ外側の帯として作り、部品の下に置く(作るのは Build のときだけ)。
+    /// 帯は「形を太い線でなぞった範囲 − 形」なので、押していない部品の半透明の塗りから透けない。
+    /// ぼかしの効果はソフトウェア描画になるので使わず、幅の違う帯を薄く重ねて柔らかく見せる。</summary>
+    void AddGlow(Part part, Geometry shape, Transform? follow = null)
+    {
+        var glow = new Canvas { Visibility = Visibility.Hidden, IsHitTestVisible = false };
+        var pen = new Pen(Brushes.Black, 1) { LineJoin = PenLineJoin.Round };
+        foreach (var (w, opacity) in GlowBands)
+        {
+            pen.Thickness = w * 2;
+            var band = Geometry.Combine(shape.GetWidenedPathGeometry(pen), shape, GeometryCombineMode.Exclude, null);
+            band.Freeze();
+            glow.Children.Add(new Path { Data = band, Opacity = opacity });
+        }
+        var b = shape.Bounds;
+        part.GlowSize = new Size(Math.Max(1, b.Width), Math.Max(1, b.Height));
+        part.GlowScale = new ScaleTransform(1, 1, b.X + b.Width / 2, b.Y + b.Height / 2);
+        glow.RenderTransform = follow is null ? part.GlowScale : new TransformGroup { Children = { part.GlowScale, follow } };
+        part.Glow = glow;
+        Canvas.Children.Add(glow);
+    }
+
+    /// <summary>押した瞬間に光を付け、付けてから 180 ミリ秒の間、薄くしながら少し外へ広げる。消えきったら隠す。</summary>
+    void Flash(Part p, bool down, bool allowed, Brush pressed, ulong nowNs)
+    {
+        if (p.Glow is null)
+            return;
+        if (down && !p.WasDown && allowed)
+        {
+            p.FlashAt = Math.Max(1, nowNs);
+            foreach (Path band in p.Glow.Children)
+                if (band.Fill != pressed) band.Fill = pressed;
+        }
+        p.WasDown = down;
+        if (p.FlashAt == 0)
+            return;
+        ulong age = nowNs > p.FlashAt ? nowNs - p.FlashAt : 0;
+        if (age >= FlashNs)
+        {
+            p.FlashAt = 0;
+            p.Glow.Visibility = Visibility.Hidden;
+            return;
+        }
+        double t = age / (double)FlashNs;
+        p.Glow.Opacity = 0.5 + 0.5 * Math.Cos(Math.PI * t); // 初めは強く、終わりはなめらかに 0 へ
+        double spread = GlowSpread * Math.Sin(t * Math.PI / 2);
+        p.GlowScale!.ScaleX = 1 + 2 * spread / p.GlowSize.Width;
+        p.GlowScale.ScaleY = 1 + 2 * spread / p.GlowSize.Height;
+        p.Glow.Visibility = Visibility.Visible;
+        _flashing = true;
+    }
+
+    void RenderParts(PadSnapshot s, Settings settings, ulong nowNs)
     {
         var pressedBrush = Draw.Pressed(settings);
         float th = (float)settings.TriggerThreshold;
+        // FR-49: 作り直した直後の 1 回と、Windows のアニメーション効果が切のときは光らせない
+        bool flash = _primed && SystemParameters.ClientAreaAnimation;
+        _primed = true;
+        _flashing = false;
         foreach (var p in _parts)
         {
             var el = p.El;
+            bool down = false;
             switch (el.Kind)
             {
                 case K.Trigger:
@@ -319,13 +404,15 @@ public sealed class PadView : PanelView
                     double h = p.Span * v;
                     p.Fill!.Height = h;
                     Canvas.SetTop(p.Fill, p.Span - h);
-                    p.Fill.Fill = v >= th ? pressedBrush : Draw.Weak;
+                    down = v >= th;
+                    p.Fill.Fill = down ? pressedBrush : Draw.Weak;
                     break;
                 case K.Stick:
                     var st = el.Key == "LeftStick" ? s.Left : s.Right;
                     p.Knob!.X = st.X * el.W * Travel;
                     p.Knob.Y = -st.Y * el.W * Travel;
-                    Draw.SetPressed(p.Shape!, s.Pressed.Contains(el.Key == "LeftStick" ? PadButton.LeftStick : PadButton.RightStick), pressedBrush, Draw.Faint);
+                    down = s.Pressed.Contains(el.Key == "LeftStick" ? PadButton.LeftStick : PadButton.RightStick);
+                    Draw.SetPressed(p.Shape!, down, pressedBrush, Draw.Faint);
                     break;
                 case K.Lever:
                     var (dx, dy) = LeverOffset(s);
@@ -336,7 +423,7 @@ public sealed class PadView : PanelView
                 case K.Deco or K.Body:
                     break;
                 default:
-                    bool down = el.Key switch
+                    down = el.Key switch
                     {
                         "LeftTrigger" => s.LeftTrigger >= th,
                         "RightTrigger" => s.RightTrigger >= th,
@@ -347,6 +434,7 @@ public sealed class PadView : PanelView
                     if (p.Arrow is not null) p.Arrow.Fill = down ? Draw.OnPressed(pressedBrush) : Draw.TextBrush;
                     break;
             }
+            Flash(p, down, flash, pressedBrush, nowNs);
         }
     }
 

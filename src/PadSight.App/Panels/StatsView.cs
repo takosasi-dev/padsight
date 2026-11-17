@@ -1,5 +1,6 @@
 // O4 統計(画面設計書 §4.4・仕様書 FR-24)。今のセッションの長さ、入力の合計、直近 60 秒、60 秒の最大、上位 5 つを出す。
-// 出す行は stats.rows で選ぶ。セッションが無いときは、前のセッションの長さと入力の数を弱い文字で出す。
+// 出す行は stats.rows で選ぶ。数の行と上位 5 つは、パッド表示の本体と同じ色の板にまとめ、上位の棒はくぼみの中に伸ばす。
+// セッションが無いときは、前のセッションの長さと入力の数を弱い文字で出す。
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -11,14 +12,20 @@ namespace PadSight.App.Panels;
 
 public sealed class StatsView : PanelView
 {
-    readonly StackPanel _stack = new() { Margin = new Thickness(12, 8, 12, 8) };
+    const double Inner = 260 - 2 * 8 - 2 * 10; // 板の中の幅(パネルの余白 8、板の内側の余白 10)
+    const double NameW = 46, CountW = 46, TrackW = Inner - NameW - CountW - 6;
+
+    readonly StackPanel _stack = new() { Width = 260, Margin = new Thickness(0, 6, 0, 0) };
+    readonly OutlineText _none = Draw.Text("", 12);
     string _builtRows = "";
-    OutlineText? _session, _inputs, _last60, _peak, _peak1, _none;
-    readonly List<(OutlineText Name, Rectangle Bar, OutlineText Count)> _top = [];
+    OutlineText? _session, _inputs, _last60, _peak, _peak1;
+    readonly List<(OutlineText Name, Rectangle Track, Rectangle Bar, OutlineText Count)> _top = [];
 
     public StatsView() : base(260, 230) // 1 秒の最大の行(FR-37)を足したので、仕様書 §9.10.2 の 200 から広げた
     {
         Canvas.Children.Add(_stack);
+        _none.Foreground = Draw.Weak;
+        _none.Width = Inner;
     }
 
     public override bool Animating(PadSnapshot s) => s.Session.Active;
@@ -33,7 +40,7 @@ public sealed class StatsView : PanelView
         ShowStatus(s.Status == InputStatus.Running ? null : StatusOf(s));
         var v = s.Session;
         var inv = CultureInfo.InvariantCulture;
-        _none!.Visibility = v.Active ? Visibility.Collapsed : Visibility.Visible;
+        _none.Visibility = v.Active ? Visibility.Collapsed : Visibility.Visible;
         if (!v.Active)
         {
             _none.Text = "セッションはまだ始まっていません" + (v.PreviousDurationSeconds is long d
@@ -48,12 +55,13 @@ public sealed class StatsView : PanelView
         long max = v.Top5.Count > 0 ? v.Top5[0].Value : 1;
         for (int i = 0; i < _top.Count; i++)
         {
-            var (name, bar, count) = _top[i];
+            var (name, track, bar, count) = _top[i];
             bool has = v.Active && i < v.Top5.Count;
             name.Text = has ? Labels.For(v.Top5[i].Key, skin, settings.LabelStyle, s.Pad) : "";
             count.Text = has ? v.Top5[i].Value.ToString("N0", inv) : "";
-            bar.Width = has ? 110.0 * v.Top5[i].Value / Math.Max(1, max) : 0;
-            bar.Fill = Draw.Line;
+            track.Visibility = has ? Visibility.Visible : Visibility.Hidden;
+            // 棒は丸い端が潰れないように、少しでもあれば高さ分(8)は出す
+            bar.Width = has ? Math.Max(8, TrackW * v.Top5[i].Value / Math.Max(1, max)) : 0;
         }
     }
 
@@ -63,46 +71,97 @@ public sealed class StatsView : PanelView
         _stack.Children.Clear();
         _top.Clear();
         _session = _inputs = _last60 = _peak = _peak1 = null;
-        _none = Draw.Text("", 12);
-        _none.Foreground = Draw.Weak;
-        _stack.Children.Add(_none);
+        (_none.Parent as Panel)?.Children.Remove(_none);
+        StackPanel? plate = null, top = null;
+        bool plateIsTop = false;
         foreach (var r in rows)
         {
+            bool isTop = r == "top5";
+            if (plate is null || plateIsTop != isTop)
+            {
+                plate = Plate();
+                plateIsTop = isTop;
+            }
             switch (r)
             {
-                case "session": _session = Line("セッション"); break;
-                case "inputs": _inputs = Line("入力"); break;
-                case "last60": _last60 = Line("直近60秒"); break;
-                case "peak": _peak = Line("60秒の最大"); break;
-                case "peak1s": _peak1 = Line("1秒の最大"); break;
+                case "session": _session = Line(plate, "セッション"); break;
+                case "inputs": _inputs = Line(plate, "入力"); break;
+                case "last60": _last60 = Line(plate, "直近60秒"); break;
+                case "peak": _peak = Line(plate, "60秒の最大"); break;
+                case "peak1s": _peak1 = Line(plate, "1秒の最大"); break;
                 case "top5":
+                    top = plate;
                     for (int i = 0; i < 5; i++)
                     {
-                        var g = new Grid { Height = 20 };
+                        var g = new Grid { Height = 19 };
                         var name = Draw.Text("", 13);
-                        var bar = new Rectangle { Height = 9, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(56, 0, 0, 0) };
+                        name.VerticalAlignment = VerticalAlignment.Center;
+                        // 棒はくぼみ(地の色を半分ほど透かした溝)の中に伸ばす。1 位は強い線の色、ほかは弱い色
+                        var track = new Rectangle
+                        {
+                            Width = TrackW, Height = 8, RadiusX = 4, RadiusY = 4, Fill = Draw.Inset,
+                            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(NameW, 0, 0, 0),
+                        };
+                        var bar = new Rectangle
+                        {
+                            Height = 8, RadiusX = 4, RadiusY = 4, Fill = i == 0 ? Draw.Line : Draw.Weak,
+                            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(NameW, 0, 0, 0),
+                        };
                         var count = Draw.Text("", 13, mono: true);
                         count.HorizontalAlignment = HorizontalAlignment.Right;
+                        count.VerticalAlignment = VerticalAlignment.Center;
                         g.Children.Add(name);
+                        g.Children.Add(track);
                         g.Children.Add(bar);
                         g.Children.Add(count);
-                        _stack.Children.Add(g);
-                        _top.Add((name, bar, count));
+                        plate.Children.Add(g);
+                        _top.Add((name, track, bar, count));
                     }
                     break;
             }
         }
+        // 「セッションはまだ始まっていません」: 上位 5 つの板があれば、その間は空なので板の真ん中に重ね、無ければ板の下に置く
+        if (top is not null)
+        {
+            _none.HorizontalAlignment = HorizontalAlignment.Center;
+            _none.VerticalAlignment = VerticalAlignment.Center;
+            _none.TextAlignment = TextAlignment.Center;
+            _none.Margin = new Thickness(0);
+            ((Grid)top.Parent).Children.Add(_none);
+        }
+        else
+        {
+            _none.TextAlignment = TextAlignment.Left;
+            _none.Margin = new Thickness(18, 2, 18, 0);
+            _stack.Children.Add(_none);
+        }
     }
 
-    OutlineText Line(string label)
+    /// <summary>本体の色の板(パッド表示の本体と同じ塗り)を 1 枚足し、その中の行の入れ物を返す。</summary>
+    StackPanel Plate()
     {
-        var g = new Grid { Height = 22 };
-        g.Children.Add(Draw.Text(label, 14));
-        var value = Draw.Text("", 14, mono: true);
+        var inner = new StackPanel();
+        _stack.Children.Add(new Border
+        {
+            Background = Draw.Body, CornerRadius = new CornerRadius(6), Padding = new Thickness(10, 3, 10, 3),
+            Margin = new Thickness(8, 0, 8, 6), Child = new Grid { Children = { inner } },
+        });
+        return inner;
+    }
+
+    /// <summary>数の行。見出しは弱い色の小さめの字、値は文字の色の Consolas(桁をそろえる)。</summary>
+    static OutlineText Line(StackPanel plate, string label)
+    {
+        var g = new Grid { Height = 20 };
+        var name = Draw.Text(label, 13);
+        name.Foreground = Draw.Weak;
+        name.VerticalAlignment = VerticalAlignment.Center;
+        g.Children.Add(name);
+        var value = Draw.Text("", 15, mono: true);
         value.HorizontalAlignment = HorizontalAlignment.Right;
+        value.VerticalAlignment = VerticalAlignment.Center;
         g.Children.Add(value);
-        g.Width = 236;
-        _stack.Children.Add(g);
+        plate.Children.Add(g);
         return value;
     }
 }
