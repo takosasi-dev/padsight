@@ -133,6 +133,9 @@ public static class Draw
     public static readonly SolidColorBrush Halo = new(Color.FromArgb(200, 0, 0, 0));
     /// <summary>メインの画面の見本・小さい表示の地(不透明)。</summary>
     public static readonly SolidColorBrush Background = new(Colors.Black);
+    /// <summary>パッドの本体の塗り(線の色をごく薄く)と、ボタン・スティックの土台のくぼみ(地の色を半分ほど)。</summary>
+    public static readonly SolidColorBrush Body = new(Color.FromArgb(38, 255, 255, 255));
+    public static readonly SolidColorBrush Inset = new(Color.FromArgb(150, 0, 0, 0));
     public const double Thin = 2.0, Thick = 3.0;
 
     static string _themeKey = "";
@@ -153,6 +156,8 @@ public static class Draw
         TextBrush.Color = Palette.Text;
         Halo.Color = Palette.Halo;
         Background.Color = Palette.Background;
+        Body.Color = Color.FromArgb(38, Palette.Line.R, Palette.Line.G, Palette.Line.B);
+        Inset.Color = Color.FromArgb(150, Palette.Background.R, Palette.Background.G, Palette.Background.B);
         return true;
     }
 
@@ -202,9 +207,10 @@ public static class Draw
         8 => 0, 9 => 45, 6 => 90, 3 => 135, 2 => 180, 1 => 225, 4 => 270, 7 => 315, _ => null,
     };
 
-    public static void SetPressed(Shape shape, bool pressed, Brush pressedBrush)
+    /// <param name="idle">押していないときの塗り。null なら透明</param>
+    public static void SetPressed(Shape shape, bool pressed, Brush pressedBrush, Brush? idle = null)
     {
-        shape.Fill = pressed ? pressedBrush : Brushes.Transparent;
+        shape.Fill = pressed ? pressedBrush : idle ?? Brushes.Transparent;
         shape.Stroke = pressed ? pressedBrush : Line;
         shape.StrokeThickness = pressed ? Thick : Thin;
     }

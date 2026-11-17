@@ -1,5 +1,6 @@
 // O1 パッド表示(画面設計書 §4.1・仕様書 FR-15〜FR-18)。スキンごとの配置を表で持ち、図形で描く(D-16)。
-// 押しているボタンは「押したときの色」で塗って線を太くし、スティックの丸は値 ×(土台の半径 × 0.6)だけ動かす。
+// 型ごとに本体の輪郭・肩のボタン・トリガーの形を描き、ボタンはその上のくぼみとして置く(2026-11-17 に作り直した)。
+// 押しているボタンは「押したときの色」で塗って線を太くし、トリガーは押した分だけ下から塗り、スティックの頭は値 × Travel だけ動かす。
 // メーカーのロゴや画像は使わない(INV-12)。
 using System.Windows;
 using System.Windows.Controls;
@@ -11,70 +12,154 @@ namespace PadSight.App.Panels;
 
 public sealed class PadView : PanelView
 {
-    enum K { Circle, Rect, Trigger, Stick, Touchpad, Lever, Deco }
+    enum K { Circle, Rect, Trigger, Stick, Touchpad, Lever, Deco, Body, Bumper }
 
-    /// <summary>Circle・Rect・Touchpad・Deco は左上と幅・高さ。Stick・Lever は中心と半径(W)。Trigger は文字の左上と棒の長さ(W)・太さ(H)。</summary>
-    sealed record El(K Kind, string Key, double X, double Y, double W, double H = 0);
+    /// <summary>Circle・Rect・Touchpad・Deco は左上と幅・高さ。Stick・Lever は中心と半径(W)。
+    /// Body(本体の輪郭)・Trigger(肩の上のトリガー)は G の形で、X・Y・W・H は使わない。Bumper(肩のボタン)は G の形で、X・Y は文字の中心。</summary>
+    sealed record El(K Kind, string Key, double X, double Y, double W, double H = 0, Geometry? G = null);
+
+    /// <summary>絵の幅(左右の写しの軸は X = 180)。</summary>
+    const double CanvasWidth = 360;
+
+    static Geometry Geo(string data)
+    {
+        var g = Geometry.Parse(data);
+        g.Freeze();
+        return g;
+    }
+
+    /// <summary>左側の形を、X = 180 を軸に右へ写す。</summary>
+    static Geometry Mirror(Geometry g)
+    {
+        var m = g.Clone();
+        m.Transform = new MatrixTransform(-1, 0, 0, 1, CanvasWidth, 0);
+        m.Freeze();
+        return m;
+    }
+
+    /// <summary>左のトリガーの形から、左右 2 つを作る。</summary>
+    static El[] TriggerPair(string trigger)
+    {
+        var g = Geo(trigger);
+        return [new(K.Trigger, "LeftTrigger", 0, 0, 0, G: g), new(K.Trigger, "RightTrigger", 0, 0, 0, G: Mirror(g))];
+    }
+
+    /// <summary>左の肩のボタンの形と、その文字の中心 (lx, ly) から、左右 2 つを作る。</summary>
+    static El[] Bumpers(string bumper, double lx, double ly)
+    {
+        var b = Geo(bumper);
+        return [new(K.Bumper, "LeftShoulder", lx, ly, 0, G: b), new(K.Bumper, "RightShoulder", CanvasWidth - lx, ly, 0, G: Mirror(b))];
+    }
+
+    /// <summary>本体の輪郭。左半分(上の真ん中から時計の逆回りに、下の真ん中まで)を渡すと、右半分を写して閉じる。</summary>
+    static El Body(string leftHalf, double topY, double bottomY)
+    {
+        // 左半分を写した物を逆にたどる代わりに、左右を 1 つずつの図形にして合わせる
+        var left = Geo($"M 180,{topY} {leftHalf} L 180,{bottomY} Z");
+        var both = Geometry.Combine(left, Mirror(left), GeometryCombineMode.Union, null);
+        both.Freeze();
+        return new(K.Body, "", 0, 0, 0, G: both);
+    }
+
+    /// <summary>十字キー。中心 (cx, cy)、腕 1 本の幅 a。真ん中の四角は飾り。</summary>
+    static El[] Dpad(double cx, double cy, double a) =>
+    [
+        new(K.Deco, "", cx - a / 2, cy - a / 2, a, a),
+        new(K.Rect, "DpadUp", cx - a / 2, cy - a * 1.5, a, a), new(K.Rect, "DpadDown", cx - a / 2, cy + a / 2, a, a),
+        new(K.Rect, "DpadLeft", cx - a * 1.5, cy - a / 2, a, a), new(K.Rect, "DpadRight", cx + a / 2, cy - a / 2, a, a),
+    ];
+
+    /// <summary>右の 4 つのボタン。中心 (cx, cy)、中心どうしの間 d、ボタンの直径 s。</summary>
+    static El[] Face(double cx, double cy, double d, double s) =>
+    [
+        new(K.Circle, "North", cx - s / 2, cy - d - s / 2, s, s), new(K.Circle, "West", cx - d - s / 2, cy - s / 2, s, s),
+        new(K.Circle, "East", cx + d - s / 2, cy - s / 2, s, s), new(K.Circle, "South", cx - s / 2, cy + d - s / 2, s, s),
+    ];
+
+    // 肩: トリガーは上の縁の後ろから出た丸い板、肩のボタンは本体の上の縁の外側に沿った帯(内側の線は本体の縁と同じ)
+    const string XboxTrigger = "M 66,32 L 67,13 C 68,6 73,2 80,2 L 108,2 C 115,2 119,6 119,13 L 120,32 Z";
+    const string XboxBumper = "M 14,86 C 24,46 52,26 90,26 L 128,25 C 133,25 135,29 133,33 L 130,40 L 90,40 C 58,42 36,60 26,92 Z";
+    const string PsTrigger = "M 60,36 L 61,13 C 62,6 67,2 74,2 L 100,2 C 107,2 111,6 111,13 L 112,36 Z";
+    const string PsBumper = "M 6,92 C 12,58 32,34 58,33 C 78,32 98,37 120,37 C 125,37 127,41 125,45 L 120,50 C 96,50 76,44 58,46 C 36,48 22,66 16,96 Z";
+    const string ProTrigger = "M 62,34 L 63,13 C 64,6 69,2 76,2 L 104,2 C 111,2 115,6 115,13 L 116,34 Z";
+    const string ProBumper = "M 10,100 C 20,58 46,32 82,31 L 128,30 C 133,30 135,34 133,38 L 130,44 C 112,42 96,42 82,44 C 50,48 30,70 22,104 Z";
 
     static readonly El[] Paddles =
     [
-        new(K.Rect, "Paddle1", 120, 222, 24, 12), new(K.Rect, "Paddle2", 150, 222, 24, 12),
-        new(K.Rect, "Paddle3", 180, 222, 24, 12), new(K.Rect, "Paddle4", 210, 222, 24, 12),
+        new(K.Rect, "Paddle1", 128, 208, 24, 16), new(K.Rect, "Paddle2", 156, 208, 24, 16),
+        new(K.Rect, "Paddle3", 184, 208, 24, 16), new(K.Rect, "Paddle4", 212, 208, 24, 16),
     ];
 
     static readonly El[] XboxLayout =
     [
-        new(K.Trigger, "LeftTrigger", 16, 8, 100, 10), new(K.Trigger, "RightTrigger", 216, 8, 100, 10),
-        new(K.Rect, "LeftShoulder", 20, 30, 80, 18), new(K.Rect, "RightShoulder", 260, 30, 80, 18),
-        new(K.Stick, "LeftStick", 70, 95, 28),
-        new(K.Rect, "Back", 128, 78, 36, 16), new(K.Circle, "Guide", 166, 70, 30, 30), new(K.Rect, "Start", 198, 78, 36, 16),
-        new(K.Circle, "North", 278, 70, 24, 24), new(K.Circle, "West", 252, 96, 24, 24),
-        new(K.Circle, "East", 304, 96, 24, 24), new(K.Circle, "South", 278, 122, 24, 24),
-        new(K.Rect, "DpadUp", 100, 146, 20, 20), new(K.Rect, "DpadDown", 100, 186, 20, 20),
-        new(K.Rect, "DpadLeft", 80, 166, 20, 20), new(K.Rect, "DpadRight", 120, 166, 20, 20),
-        new(K.Stick, "RightStick", 230, 170, 28),
-        new(K.Rect, "Misc1", 280, 196, 44, 16),
+        .. TriggerPair(XboxTrigger),
+        Body("C 150,42 118,38 90,40 C 58,42 36,60 26,92 C 16,124 12,170 26,206 C 36,230 62,238 86,228 C 100,222 108,208 118,194 C 132,176 152,170 180,170", 46, 170),
+        .. Bumpers(XboxBumper, 100, 33),
+        new(K.Stick, "LeftStick", 86, 100, 24),
+        new(K.Rect, "Back", 132, 86, 36, 16), new(K.Circle, "Guide", 166, 54, 28, 28), new(K.Rect, "Start", 192, 86, 36, 16),
+        new(K.Rect, "Misc1", 160, 110, 40, 16),
+        .. Face(276, 100, 24, 22),
+        .. Dpad(128, 152, 19),
+        new(K.Stick, "RightStick", 232, 152, 22),
         .. Paddles,
     ];
 
     static readonly El[] PlayStationLayout =
     [
-        new(K.Trigger, "LeftTrigger", 16, 8, 100, 10), new(K.Trigger, "RightTrigger", 216, 8, 100, 10),
-        new(K.Rect, "LeftShoulder", 20, 30, 80, 18), new(K.Rect, "RightShoulder", 260, 30, 80, 18),
-        new(K.Rect, "DpadUp", 50, 86, 20, 20), new(K.Rect, "DpadDown", 50, 126, 20, 20),
-        new(K.Rect, "DpadLeft", 30, 106, 20, 20), new(K.Rect, "DpadRight", 70, 106, 20, 20),
-        new(K.Rect, "Back", 92, 60, 44, 16), new(K.Touchpad, "Touchpad", 140, 52, 80, 40), new(K.Rect, "Start", 224, 60, 48, 16),
-        new(K.Circle, "North", 288, 66, 24, 24), new(K.Circle, "West", 262, 92, 24, 24),
-        new(K.Circle, "East", 314, 92, 24, 24), new(K.Circle, "South", 288, 118, 24, 24),
-        new(K.Circle, "Guide", 165, 100, 30, 30),
-        new(K.Stick, "LeftStick", 120, 180, 26), new(K.Stick, "RightStick", 240, 180, 26),
-        new(K.Rect, "Misc1", 158, 150, 44, 16),
+        .. TriggerPair(PsTrigger),
+        Body("L 120,50 C 96,50 76,44 58,46 C 36,48 22,66 16,96 C 8,136 10,190 26,220 C 36,238 62,240 76,226 C 88,214 98,196 112,180 C 126,166 150,164 180,164", 50, 164),
+        .. Bumpers(PsBumper, 90, 41),
+        .. Dpad(66, 106, 19),
+        new(K.Rect, "Back", 94, 58, 44, 16), new(K.Touchpad, "Touchpad", 140, 44, 80, 44), new(K.Rect, "Start", 222, 58, 48, 16),
+        .. Face(294, 106, 23, 22),
+        new(K.Circle, "Guide", 166, 96, 28, 28),
+        new(K.Rect, "Misc1", 158, 126, 44, 16),
+        new(K.Stick, "LeftStick", 126, 144, 22), new(K.Stick, "RightStick", 234, 144, 22),
         .. Paddles,
     ];
 
+    static readonly El[] SwitchProLayout =
+    [
+        .. TriggerPair(ProTrigger),
+        Body("C 146,44 110,40 82,44 C 50,48 30,70 22,104 C 14,140 16,190 34,216 C 48,236 74,238 92,224 C 104,214 112,198 122,184 C 136,170 156,166 180,166", 48, 166),
+        .. Bumpers(ProBumper, 100, 37),
+        new(K.Stick, "LeftStick", 82, 100, 24),
+        new(K.Rect, "Back", 136, 64, 26, 16), new(K.Rect, "Start", 198, 64, 26, 16),
+        new(K.Rect, "Misc1", 118, 90, 56, 16), new(K.Circle, "Guide", 194, 86, 28, 28),
+        .. Face(278, 100, 24, 22),
+        .. Dpad(132, 148, 18),
+        new(K.Stick, "RightStick", 228, 150, 22),
+        .. Paddles,
+    ];
+
+    // Joy-Con は 2 本の別々の本体。内側の辺がまっすぐで、外側が丸い
+    const string JoyConLeft = "M 166,40 L 166,236 L 96,236 C 56,236 34,210 34,170 L 34,104 C 34,64 56,40 96,40 Z";
+    const string JoyConTrigger = "M 68,32 C 74,12 88,2 106,2 L 136,2 C 141,2 143,6 143,11 L 143,32 Z";
+    const string JoyConBumper = "M 22,104 C 22,56 50,28 96,28 L 140,28 C 144,28 146,31 146,35 L 146,40 L 96,40 C 56,40 34,64 34,104 Z";
+
     static readonly El[] JoyConPairLayout =
     [
-        new(K.Deco, "", 18, 28, 152, 206), new(K.Deco, "", 190, 28, 152, 206),
-        new(K.Trigger, "LeftTrigger", 24, 6, 100, 10), new(K.Trigger, "RightTrigger", 206, 6, 100, 10),
-        new(K.Rect, "LeftShoulder", 28, 36, 70, 16), new(K.Rect, "Back", 128, 40, 28, 16),
-        new(K.Stick, "LeftStick", 80, 92, 24),
-        new(K.Circle, "DpadUp", 70, 128, 20, 20), new(K.Circle, "DpadLeft", 50, 148, 20, 20),
-        new(K.Circle, "DpadRight", 90, 148, 20, 20), new(K.Circle, "DpadDown", 70, 168, 20, 20),
-        new(K.Rect, "Misc1", 96, 200, 60, 16),
-        new(K.Rect, "RightShoulder", 262, 36, 70, 16), new(K.Rect, "Start", 204, 40, 28, 16),
-        new(K.Circle, "North", 270, 66, 24, 24), new(K.Circle, "West", 246, 90, 24, 24),
-        new(K.Circle, "East", 294, 90, 24, 24), new(K.Circle, "South", 270, 114, 24, 24),
-        new(K.Stick, "RightStick", 284, 176, 24), new(K.Circle, "Guide", 204, 186, 30, 30),
+        .. TriggerPair(JoyConTrigger),
+        new(K.Body, "", 0, 0, 0, G: Geo(JoyConLeft)), new(K.Body, "", 0, 0, 0, G: Mirror(Geo(JoyConLeft))),
+        .. Bumpers(JoyConBumper, 112, 34),
+        new(K.Rect, "Back", 138, 54, 22, 16), new(K.Rect, "Start", 200, 54, 22, 16),
+        new(K.Stick, "LeftStick", 98, 104, 22),
+        new(K.Circle, "DpadUp", 88, 138, 20, 20), new(K.Circle, "DpadLeft", 66, 160, 20, 20),
+        new(K.Circle, "DpadRight", 110, 160, 20, 20), new(K.Circle, "DpadDown", 88, 182, 20, 20),
+        new(K.Rect, "Misc1", 100, 210, 58, 16),
+        .. Face(262, 104, 23, 22),
+        new(K.Stick, "RightStick", 262, 172, 22), new(K.Circle, "Guide", 202, 202, 28, 28),
     ];
 
     static readonly El[] ArcadeLayout =
     [
-        new(K.Lever, "", 80, 110, 30),
-        new(K.Circle, "West", 160, 64, 30, 30), new(K.Circle, "North", 204, 64, 30, 30),
-        new(K.Circle, "RightShoulder", 248, 64, 30, 30), new(K.Circle, "LeftShoulder", 292, 64, 30, 30),
-        new(K.Circle, "South", 160, 112, 30, 30), new(K.Circle, "East", 204, 112, 30, 30),
-        new(K.Circle, "RightTrigger", 248, 112, 30, 30), new(K.Circle, "LeftTrigger", 292, 112, 30, 30),
-        new(K.Rect, "Back", 118, 192, 36, 16), new(K.Circle, "Guide", 165, 184, 30, 30), new(K.Rect, "Start", 206, 192, 36, 16),
+        new(K.Body, "", 0, 0, 0, G: Geo("M 30,22 L 330,22 C 342,22 350,30 350,42 L 350,214 C 350,226 342,234 330,234 L 30,234 C 18,234 10,226 10,214 L 10,42 C 10,30 18,22 30,22 Z")),
+        new(K.Lever, "", 80, 116, 30),
+        new(K.Circle, "West", 160, 70, 30, 30), new(K.Circle, "North", 204, 62, 30, 30),
+        new(K.Circle, "RightShoulder", 248, 62, 30, 30), new(K.Circle, "LeftShoulder", 292, 70, 30, 30),
+        new(K.Circle, "South", 160, 116, 30, 30), new(K.Circle, "East", 204, 108, 30, 30),
+        new(K.Circle, "RightTrigger", 248, 108, 30, 30), new(K.Circle, "LeftTrigger", 292, 116, 30, 30),
+        new(K.Rect, "Back", 118, 194, 36, 16), new(K.Circle, "Guide", 165, 186, 30, 30), new(K.Rect, "Start", 206, 194, 36, 16),
     ];
 
     sealed class Part
@@ -85,7 +170,12 @@ public sealed class PadView : PanelView
         public Path? Arrow;
         public Rectangle? Fill;
         public TranslateTransform? Knob;
+        /// <summary>トリガーの塗りの高さの最大(形の高さ)。</summary>
+        public double Span;
     }
+
+    /// <summary>スティックの頭が動く距離(土台の半径に対する割合)。頭の半径は土台の 0.56。</summary>
+    const double Travel = 0.44, KnobRatio = 0.56;
 
     readonly List<Part> _parts = [];
     readonly List<OutlineText> _raw = [];
@@ -124,6 +214,7 @@ public sealed class PadView : PanelView
         var layout = skin switch
         {
             Skin.PlayStation => PlayStationLayout,
+            Skin.SwitchPro => SwitchProLayout,
             Skin.JoyConPair => JoyConPairLayout,
             Skin.Arcade => ArcadeLayout,
             _ => XboxLayout,
@@ -145,26 +236,53 @@ public sealed class PadView : PanelView
         var part = new Part { El = el };
         switch (el.Kind)
         {
-            case K.Deco:
-                Canvas.Children.Add(new Rectangle { Width = el.W, Height = el.H, RadiusX = 30, RadiusY = 30, Stroke = Draw.Faint, StrokeThickness = Draw.Thin }.At(el.X, el.Y));
+            case K.Body:
+                Canvas.Children.Add(new Path { Data = el.G, Fill = Draw.Body, Stroke = Draw.Weak, StrokeThickness = 1.5, StrokeLineJoin = PenLineJoin.Round });
+                break;
+            case K.Deco: // 十字キーの真ん中。腕の線がそのまま十字の輪郭になるように、線は引かない
+                Canvas.Children.Add(new Rectangle { Width = el.W, Height = el.H, Fill = Draw.Inset }.At(el.X, el.Y));
                 break;
             case K.Trigger:
-                Canvas.Children.Add(Draw.Text(Labels.For(el.Key, skin, settings.LabelStyle, pad), 12.5).At(el.X, el.Y - 3));
-                Canvas.Children.Add(new Rectangle { Width = el.W, Height = el.H, Stroke = Draw.Line, StrokeThickness = 1 }.At(el.X + 26, el.Y));
-                part.Fill = new Rectangle { Width = 0, Height = el.H }.At(el.X + 26, el.Y);
-                Canvas.Children.Add(part.Fill);
+            {
+                var b = el.G!.Bounds;
+                Canvas.Children.Add(new Path { Data = el.G, Fill = Draw.Inset, Stroke = Draw.Line, StrokeThickness = Draw.Thin, StrokeLineJoin = PenLineJoin.Round });
+                // 塗りは形で切り抜いた入れ物の中で、下から伸ばす(写した形は自分の変換を持つので、組にして動かす)
+                var clip = new GeometryGroup { Children = { el.G }, Transform = new TranslateTransform(-b.X, -b.Y) };
+                clip.Freeze();
+                var holder = new Canvas { Width = b.Width, Height = b.Height, Clip = clip, IsHitTestVisible = false };
+                part.Fill = new Rectangle { Width = b.Width, Height = 0 };
+                part.Span = b.Height;
+                holder.Children.Add(part.Fill.At(0, b.Height));
+                Canvas.Children.Add(holder.At(b.X, b.Y));
+                var caption = Draw.Text(Labels.For(el.Key, skin, settings.LabelStyle, pad), 12);
+                caption.Width = b.Width;
+                caption.TextAlignment = TextAlignment.Center;
+                Canvas.Children.Add(caption.At(b.X, b.Y + 6));
+                break;
+            }
+            case K.Bumper:
+                part.Shape = new Path { Data = el.G, StrokeLineJoin = PenLineJoin.Round };
+                Canvas.Children.Add(part.Shape);
+                part.Label = new TextBlock
+                {
+                    Text = Labels.For(el.Key, skin, settings.LabelStyle, pad), FontFamily = Draw.Ui, FontSize = 11,
+                    Width = 60, TextAlignment = TextAlignment.Center, IsHitTestVisible = false,
+                };
+                Canvas.Children.Add(part.Label.At(el.X - 30, el.Y - 8));
                 break;
             case K.Stick or K.Lever:
-                Canvas.Children.Add(new Ellipse { Width = el.W * 2, Height = el.W * 2, Stroke = Draw.Line, StrokeThickness = Draw.Thin }.At(el.X - el.W, el.Y - el.W));
-                double kr = el.W * 0.45;
+                Canvas.Children.Add(new Ellipse { Width = el.W * 2, Height = el.W * 2, Fill = Draw.Inset, Stroke = Draw.Line, StrokeThickness = Draw.Thin }.At(el.X - el.W, el.Y - el.W));
+                double kr = el.W * KnobRatio;
                 part.Knob = new TranslateTransform();
                 part.Shape = new Ellipse { Width = kr * 2, Height = kr * 2, RenderTransform = part.Knob }.At(el.X - kr, el.Y - kr);
                 Canvas.Children.Add(part.Shape);
+                if (el.Kind == K.Stick) // 頭の上の滑り止めの輪。頭と一緒に動く
+                    Canvas.Children.Add(new Ellipse { Width = kr * 1.1, Height = kr * 1.1, Stroke = Draw.Faint, StrokeThickness = 1.5, RenderTransform = part.Knob, IsHitTestVisible = false }.At(el.X - kr * 0.55, el.Y - kr * 0.55));
                 break;
             default:
                 part.Shape = el.Kind == K.Circle
                     ? new Ellipse { Width = el.W, Height = el.H }
-                    : new Rectangle { Width = el.W, Height = el.H, RadiusX = 4, RadiusY = 4 };
+                    : new Rectangle { Width = el.W, Height = el.H, RadiusX = el.Key.StartsWith("Dpad", StringComparison.Ordinal) ? 2 : 4, RadiusY = el.Key.StartsWith("Dpad", StringComparison.Ordinal) ? 2 : 4 };
                 Canvas.Children.Add(part.Shape.At(el.X, el.Y));
                 if (el.Key.StartsWith("Dpad", StringComparison.Ordinal))
                 {
@@ -198,22 +316,24 @@ public sealed class PadView : PanelView
             {
                 case K.Trigger:
                     float v = el.Key == "LeftTrigger" ? s.LeftTrigger : s.RightTrigger;
-                    p.Fill!.Width = el.W * v;
-                    p.Fill.Fill = v >= th ? pressedBrush : Draw.Line;
+                    double h = p.Span * v;
+                    p.Fill!.Height = h;
+                    Canvas.SetTop(p.Fill, p.Span - h);
+                    p.Fill.Fill = v >= th ? pressedBrush : Draw.Weak;
                     break;
                 case K.Stick:
                     var st = el.Key == "LeftStick" ? s.Left : s.Right;
-                    p.Knob!.X = st.X * el.W * 0.6;
-                    p.Knob.Y = -st.Y * el.W * 0.6;
-                    Draw.SetPressed(p.Shape!, s.Pressed.Contains(el.Key == "LeftStick" ? PadButton.LeftStick : PadButton.RightStick), pressedBrush);
+                    p.Knob!.X = st.X * el.W * Travel;
+                    p.Knob.Y = -st.Y * el.W * Travel;
+                    Draw.SetPressed(p.Shape!, s.Pressed.Contains(el.Key == "LeftStick" ? PadButton.LeftStick : PadButton.RightStick), pressedBrush, Draw.Faint);
                     break;
                 case K.Lever:
                     var (dx, dy) = LeverOffset(s);
-                    p.Knob!.X = dx * el.W * 0.6;
-                    p.Knob.Y = -dy * el.W * 0.6;
+                    p.Knob!.X = dx * el.W * Travel;
+                    p.Knob.Y = -dy * el.W * Travel;
                     p.Shape!.Fill = Draw.Line;
                     break;
-                case K.Deco:
+                case K.Deco or K.Body:
                     break;
                 default:
                     bool down = el.Key switch
@@ -222,7 +342,7 @@ public sealed class PadView : PanelView
                         "RightTrigger" => s.RightTrigger >= th,
                         _ => Enum.TryParse<PadButton>(el.Key, out var b) && s.Pressed.Contains(b),
                     };
-                    Draw.SetPressed(p.Shape!, down, pressedBrush);
+                    Draw.SetPressed(p.Shape!, down, pressedBrush, Draw.Inset);
                     if (p.Label is not null) p.Label.Foreground = down ? Draw.OnPressed(pressedBrush) : Draw.TextBrush;
                     if (p.Arrow is not null) p.Arrow.Fill = down ? Draw.OnPressed(pressedBrush) : Draw.TextBrush;
                     break;
@@ -248,16 +368,17 @@ public sealed class PadView : PanelView
             switch (el.Kind)
             {
                 case K.Trigger:
-                    p.Fill!.Width = el.W;
+                    p.Fill!.Height = p.Span;
+                    Canvas.SetTop(p.Fill, 0);
                     p.Fill.Fill = brush;
                     break;
                 case K.Lever:
                     p.Shape!.Fill = Draw.Line;
                     break;
-                case K.Deco:
+                case K.Deco or K.Body:
                     break;
                 default: // ボタンと、スティックの押し込み(つまみは真ん中のまま)
-                    p.Shape!.Fill = brush;
+                    p.Shape!.Fill = v > 0 ? brush : el.Kind == K.Stick ? Draw.Faint : Draw.Inset;
                     p.Shape.Stroke = v >= 1 ? pressed : Draw.Line;
                     p.Shape.StrokeThickness = v >= 1 ? Draw.Thick : Draw.Thin;
                     // 薄い塗りは地の色が透けるので、半分より濃いときだけ塗りに合わせた文字の色にする
