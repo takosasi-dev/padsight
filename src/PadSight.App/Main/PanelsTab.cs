@@ -58,6 +58,7 @@ public sealed class PanelsTab : UserControl
         string name = Selected;
         var p = s.Panels[name];
         var stack = new StackPanel();
+        stack.Children.Add(ProfileRows());
         // FR-39: 4 枚に共通の配色テーマ。選ぶと押したときの色もおすすめの色にする
         stack.Children.Add(Ui.Row("パネルの配色(4 枚共通)", Ui.Combo(PanelTheme.Choices, s.PanelTheme, v =>
         {
@@ -96,6 +97,69 @@ public sealed class PanelsTab : UserControl
         _settingsHost.Content = stack;
         _previewBox.Child = _previews[name];
         _dirty = true;
+    }
+
+    string? _profileChoice;
+    string _profileNote = "";
+
+    /// <summary>FR-42: プロファイルの一覧・当てる・消す・今の設定を保存。</summary>
+    UIElement ProfileRows()
+    {
+        var s = App.Current.Settings;
+        var stack = new StackPanel();
+        var names = s.Profiles.Keys.OrderBy(n => n, StringComparer.CurrentCulture).ToList();
+        if (names.Count == 0)
+            stack.Children.Add(Ui.Row("プロファイル", Ui.Weak("まだありません")));
+        else
+        {
+            if (_profileChoice is null || !names.Contains(_profileChoice))
+                _profileChoice = names[0];
+            stack.Children.Add(Ui.Row("プロファイル", Ui.Horizontal(
+                Ui.Combo([.. names.Select(n => (n, n))], _profileChoice, v => _profileChoice = v),
+                Ui.Button("当てる", () =>
+                {
+                    string name = _profileChoice!;
+                    App.Current.ReplaceSettings(s.WithProfile(name, out var reset));
+                    foreach (var key in reset)
+                        AppLog.Write("プロファイルの値を既定に戻した: " + key);
+                    _profileNote = $"『{name}』を当てました";
+                    Build();
+                }),
+                Ui.Button("消す", () =>
+                {
+                    string name = _profileChoice!;
+                    if (MessageBox.Show(Window.GetWindow(this), $"プロファイル『{name}』を消します", "PadSight", MessageBoxButton.OKCancel) != MessageBoxResult.OK)
+                        return;
+                    s.Profiles.Remove(name);
+                    App.Current.SaveSettings();
+                    _profileNote = $"『{name}』を消しました";
+                    Build();
+                }))));
+        }
+        var nameBox = new TextBox { Width = 150, MaxLength = 30, VerticalAlignment = VerticalAlignment.Center };
+        Button? save = null;
+        save = Ui.Button("保存", () =>
+        {
+            string name = nameBox.Text.Trim();
+            bool exists = s.Profiles.ContainsKey(name);
+            if (!exists && s.Profiles.Count >= Settings.MaxProfiles)
+                _profileNote = "20 個までです。どれかを消してください";
+            else if (exists && MessageBox.Show(Window.GetWindow(this), $"『{name}』を今の設定で上書きします", "PadSight", MessageBoxButton.OKCancel) != MessageBoxResult.OK)
+                return;
+            else if (s.SaveProfile(name))
+            {
+                App.Current.SaveSettings();
+                _profileChoice = name;
+                _profileNote = $"『{name}』を保存しました";
+            }
+            Build();
+        });
+        save.IsEnabled = false;
+        nameBox.TextChanged += (_, _) => save.IsEnabled = Settings.IsProfileName(nameBox.Text);
+        stack.Children.Add(Ui.Row("今の設定に名前を付ける", Ui.Horizontal(nameBox, save)));
+        if (_profileNote.Length > 0)
+            stack.Children.Add(Ui.Row("", Ui.Weak(_profileNote)));
+        return stack;
     }
 
     /// <summary>#RRGGBB を入れる欄と色見本。形が正しいときだけ効かせる。</summary>

@@ -14,10 +14,12 @@ The user interface is in Japanese only.
 - **Pad view**: pressed buttons, D-pad, stick position and click, and trigger travel, drawn as a pad. Xbox, PlayStation, Switch Pro, Joy-Con pair, arcade stick and generic layouts; chosen automatically from the pad type
 - **Input history**: direction (numpad notation) and pressed buttons, one row per change, newest first, with each row's length in frames (60 / 120 / 144 / 240) or milliseconds
 - **Sticks**: left and right stick position, trail and values, plus trigger values. The main window can measure the resting drift and the outer range shape of a stick
-- **Stats**: session length, input count, inputs in the last 60 seconds, peak inputs per second (mashing speed) and per-button counts. Per-pad lifetime totals are kept too. Per-session totals are kept and can be viewed by period or exported as CSV
+- **Stats**: session length, input count, inputs in the last 60 seconds, peak inputs per second (mashing speed) and per-button counts. Per-pad lifetime totals are kept too. Per-session totals are kept and can be viewed by period, as a 30-day bar chart, or exported as CSV
 - Panels let clicks through to the window below and never take focus. Hotkeys hide all panels, enter the arrange mode, and clear the history (defaults Ctrl+Alt+G / J / H)
 - Panels can be dragged, or rearranged in one click to the corners or stacked on the left or right
 - Panel color themes: Classic, Neon, Light, High contrast, and a custom theme with your own background, line and text colors
+- Save the panel layout, colors and shown rows as named profiles and switch between them by hand
+- A demo mode plays a fixed input pattern so you can see the panels move without a pad (demo input is not counted in the stats)
 - Lives in the system tray and can start at sign-in
 
 ![Main window (home)](docs/images/home.png)
@@ -82,7 +84,7 @@ Data lives in `%LOCALAPPDATA%\PadSight\` (settings, session totals, logs). To ad
 
 ## Status
 
-v0.1.0 (in development). All features are in place and the unit tests (203) pass, but **it has not yet been tested with real pads**. The default input backend, the check that pads are left unchanged, and performance measurements are still to be done on real hardware.
+v0.1.0 (in development). All features are in place and the unit tests (212) pass, but **it has not yet been tested with real pads**. The default input backend, the check that pads are left unchanged, and performance measurements are still to be done on real hardware.
 
 ## License
 

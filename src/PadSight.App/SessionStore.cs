@@ -97,7 +97,7 @@ public sealed class SessionStore : IDisposable
     /// <summary>進行中のセッションを 60 秒ごとに書き換える(§9.6.4)。</summary>
     public void WriteCurrent(SessionRecord r)
     {
-        string json = SessionJson.ToLine(r, TimeZoneInfo.Local);
+        string json = SessionJson.ToLine(r, TimeZoneInfo.Local, withPerPad: true);
         _queue.Add(() => TryIo(() =>
         {
             File.WriteAllText(CurrentPath + ".tmp", json, Utf8);

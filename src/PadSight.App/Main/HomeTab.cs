@@ -26,6 +26,23 @@ public sealed class HomeTab : UserControl
     DateTime? _checkEnd;
     long _checkCounter = -1, _checkCount;
 
+    /// <summary>FR-40: デモを流す・止める。流している間は横に知らせを出す。</summary>
+    UIElement DemoButton()
+    {
+        var note = Ui.Weak();
+        note.VerticalAlignment = VerticalAlignment.Center;
+        Button? b = null;
+        void Show()
+        {
+            bool on = App.Current.DemoRunning;
+            b!.Content = on ? "デモを止める" : "デモを流す";
+            note.Text = on ? "デモの入力を流しています(統計には数えません)" : "";
+        }
+        b = Ui.Button("", () => { App.Current.SetDemo(!App.Current.DemoRunning); Show(); });
+        Show();
+        return Ui.Horizontal(b, note);
+    }
+
     public HomeTab()
     {
         _toggle = Ui.Button("パネルを隠す", () => App.Current.Panels.Toggle());
@@ -65,7 +82,8 @@ public sealed class HomeTab : UserControl
         stack.Children.Add(Ui.Horizontal(Ui.Text("まとめて置き直す  "),
             Ui.Button("四隅", () => App.Current.Panels.ArrangePreset("corners")),
             Ui.Button("左側に縦に並べる", () => App.Current.Panels.ArrangePreset("left")),
-            Ui.Button("右側に縦に並べる", () => App.Current.Panels.ArrangePreset("right"))));
+            Ui.Button("右側に縦に並べる", () => App.Current.Panels.ArrangePreset("right")),
+            Ui.Text("   "), DemoButton()));
         stack.Children.Add(Ui.Weak($"パネルの位置は「配置を直す」({App.Current.Settings.HotkeyArrange ?? "ホットキーなし"})のあと、ドラッグで動かせます。右下のつまみで大きさも変わります。次の起動でも同じ位置に出ます"));
         stack.Children.Add(Ui.Section("パッド"));
         stack.Children.Add(_list);

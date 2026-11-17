@@ -130,6 +130,29 @@ public partial class App : Application
 
     public void PostToInput(Action<InputEngine> command) => _input.Post(command);
 
+    /// <summary>FR-40。保存しないので、起動したときはいつも止まっている。</summary>
+    public bool DemoRunning { get; private set; }
+
+    public void SetDemo(bool on)
+    {
+        DemoRunning = on;
+        _input.SetDemo(on);
+        AppLog.Write(on ? "デモを流した" : "デモを止めた");
+    }
+
+    /// <summary>設定を中身ごと入れ替えて、パネル・テーマ・ホットキーに効かせる(写しから戻す・プロファイルを当てる)。</summary>
+    public void ReplaceSettings(Settings next)
+    {
+        // 型が同じなので、JSON を通して中身ごと入れ替える(Settings を持っている所が同じ物を見続けるように)
+        var copy = next.Clone();
+        foreach (var p in typeof(Settings).GetProperties().Where(p => p.CanWrite))
+            p.SetValue(Settings, p.GetValue(copy));
+        SaveSettings();
+        Panels.ApplyAll();
+        ApplyTheme();
+        RegisterHotkeys();
+    }
+
     /// <summary>入力の取り方を変えてつなぎ直す(FR-8)。</summary>
     public void ReconnectInput()
     {

@@ -36,6 +36,18 @@ public sealed class SdlInputThread
     InputOptions _options;
     InputOptions? _reconnectTo;
     int? _mappingCount;
+    // FR-40: デモは本物とは別の InputEngine で動かし、確定した集計は捨てる。時計は SDL に頼らない(初期化に失敗していても流せる)
+    int _demoRequest = -1; // -1 頼み無し、0 止める、1 流す
+    DemoPlayer? _demo;
+    InputEngine? _demoEngine;
+    EngineConfig? _demoConfigFrom;
+    static readonly StopwatchClock DemoClock = new();
+
+    sealed class StopwatchClock : IClock
+    {
+        public DateTime UtcNow => DateTime.UtcNow;
+        public ulong MonotonicNs => (ulong)(Stopwatch.GetTimestamp() * (1e9 / Stopwatch.Frequency));
+    }
 
     public SdlInputThread(EngineConfig config, InputOptions options, string? mappingFile,
         Action<PadSnapshot> publish, Action<IReadOnlyList<SessionRecord>> finalized, Action<SessionRecord> checkpoint, Action<string> log)
@@ -59,6 +71,13 @@ public sealed class SdlInputThread
     public void Post(Action<InputEngine> command)
     {
         _commands.Enqueue(command);
+        _wake.Set();
+    }
+
+    /// <summary>デモの入力を流す・止める(FR-40)。</summary>
+    public void SetDemo(bool on)
+    {
+        Volatile.Write(ref _demoRequest, on ? 1 : 0);
         _wake.Set();
     }
 
@@ -99,14 +118,31 @@ public sealed class SdlInputThread
                 cmd(_engine);
                 dirty = true;
             }
+            switch (Interlocked.Exchange(ref _demoRequest, -1))
+            {
+                case 1 when _demo is null:
+                    ulong start = DemoClock.MonotonicNs;
+                    _demo = new DemoPlayer(start);
+                    _demoEngine = new InputEngine(DemoClock, DemoConfig());
+                    _demoEngine.Apply(_demo.Added());
+                    break;
+                case 0:
+                    _demo = null;
+                    _demoEngine = null;
+                    dirty = true; // 本物の状態を出し直す
+                    break;
+            }
             if (!ok)
             {
                 FlushFinalized();
-                _wake.WaitOne(250);
+                if (_demo is not null) StepDemo();
+                _wake.WaitOne(_demo is null ? 250 : DemoStepMs);
                 continue;
             }
             long sinceMs = (Stopwatch.GetTimestamp() - lastPublish) * 1000 / Stopwatch.Frequency;
             int timeout = dirty ? (int)Math.Max(0, MinPublishTicks - sinceMs) : 250;
+            if (_demo is not null)
+                timeout = Math.Min(timeout, DemoStepMs);
             if (SDL.WaitEventTimeout(out var e, timeout))
             {
                 Handle(e);
@@ -124,7 +160,16 @@ public sealed class SdlInputThread
             }
             FlushFinalized();
             sinceMs = (Stopwatch.GetTimestamp() - lastPublish) * 1000 / Stopwatch.Frequency;
-            if (dirty && sinceMs >= MinPublishTicks)
+            if (_demo is not null)
+            {
+                if (sinceMs >= DemoStepMs)
+                {
+                    lastPublish = Stopwatch.GetTimestamp();
+                    StepDemo();
+                }
+                dirty = false;
+            }
+            else if (dirty && sinceMs >= MinPublishTicks)
             {
                 lastPublish = Stopwatch.GetTimestamp();
                 _publish(_engine.Snapshot(now, lastPublish, InputStatus.Running, null, _mappingCount));
@@ -179,6 +224,24 @@ public sealed class SdlInputThread
         }
         _open.Clear();
         SDL.Quit();
+    }
+
+    const int DemoStepMs = 16;
+
+    // デモでは固定のパッドを出したいので、選び方は「最後に操作」にする
+    EngineConfig DemoConfig() => (_demoConfigFrom = _engine.Config) with { SelectionMode = "last_used", PinnedGuid = null };
+
+    void StepDemo()
+    {
+        if (!ReferenceEquals(_demoConfigFrom, _engine.Config))
+            _demoEngine!.Configure(DemoConfig()); // 履歴の行やボタンの設定を変えたら、デモにも効かせる
+        long sw = Stopwatch.GetTimestamp();
+        ulong now = (ulong)(sw * (1e9 / Stopwatch.Frequency));
+        foreach (var ev in _demo!.Advance(now))
+            _demoEngine!.Apply(ev);
+        _demoEngine!.Tick(now);
+        _demoEngine.TakeFinalized(); // FR-40: デモの集計は保存しない
+        _publish(_demoEngine.Snapshot(now, sw, InputStatus.Running, null, _mappingCount));
     }
 
     void FlushFinalized()

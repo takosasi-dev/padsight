@@ -52,6 +52,10 @@ public sealed class StatsTab : UserControl
         stack.Children.Add(_list);
         stack.Children.Add(_empty);
         stack.Children.Add(_bad);
+        stack.Children.Add(Ui.Section("直近 30 日"));
+        stack.Children.Add(Ui.Row("見る値", Ui.Combo([("inputs", "入力の数"), ("minutes", "遊んだ時間(分)"), ("peak1s", "1 秒の最大")], _metric,
+            v => { _metric = v; RefreshChart(); }), 80));
+        stack.Children.Add(_chart);
         var padGrid = new GridView();
         foreach (var (h, p, w) in new[] { ("パッド", nameof(PadTotalRow.Name), 260.0), ("種類", nameof(PadTotalRow.Kind), 110.0), ("通算の入力", nameof(PadTotalRow.Inputs), 100.0),
             ("多いボタン", nameof(PadTotalRow.Top), 240.0), ("最後に使った日", nameof(PadTotalRow.LastUsed), 110.0) })
@@ -70,7 +74,46 @@ public sealed class StatsTab : UserControl
         _all = records;
         _bad.Text = bad > 0 ? $"読めなかった行: {bad}" : "";
         RefreshPads();
+        RefreshChart();
         Refresh();
+    }
+
+    readonly Canvas _chart = new() { Width = 600, Height = 150, Margin = new Thickness(0, 4, 0, 8), HorizontalAlignment = HorizontalAlignment.Left };
+    string _metric = "inputs";
+
+    /// <summary>FR-41: 直近 30 日の日ごとの棒。期間の選択とは関係なく、いつも直近 30 日。</summary>
+    void RefreshChart()
+    {
+        const double top = 20, height = 110, bar = 16, step = 20;
+        var inv = CultureInfo.InvariantCulture;
+        string Fmt(double v) => _metric == "inputs" ? v.ToString("N0", inv) : v.ToString("0", inv);
+        var data = DailyChart.Build(_all, _metric, DateTime.UtcNow.ToLocalTime().Date, TimeZoneInfo.Local);
+        double max = data.Max(d => d.Value);
+        _chart.Children.Clear();
+        _chart.Children.Add(Ui.Weak(max > 0 ? $"一番多い日: {Fmt(max)}" : "直近 30 日の記録はありません"));
+        var baseLine = new System.Windows.Shapes.Rectangle { Width = step * data.Count, Height = 1 };
+        baseLine.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "BorderBrush");
+        Canvas.SetTop(baseLine, top + height);
+        _chart.Children.Add(baseLine);
+        for (int i = 0; i < data.Count; i++)
+        {
+            var (day, v) = data[i];
+            if (v > 0)
+            {
+                var r = new System.Windows.Shapes.Rectangle { Width = bar, Height = Math.Max(1, v / max * height), ToolTip = $"{day.ToString("MM/dd", inv)}: {Fmt(v)}" };
+                r.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "AccentBrush");
+                Canvas.SetLeft(r, i * step);
+                Canvas.SetTop(r, top + height - r.Height);
+                _chart.Children.Add(r);
+            }
+            if ((data.Count - 1 - i) % 7 == 0) // 今日から 7 日ずつさかのぼって置く(左から数えると右端で「今日」と重なる)
+            {
+                var label = Ui.Weak(i == data.Count - 1 ? "今日" : day.ToString("MM/dd", inv));
+                Canvas.SetLeft(label, i * step);
+                Canvas.SetTop(label, top + height + 2);
+                _chart.Children.Add(label);
+            }
+        }
     }
 
     public void Render(PadSnapshot s) => _split.IsEnabled = s.SessionActive;

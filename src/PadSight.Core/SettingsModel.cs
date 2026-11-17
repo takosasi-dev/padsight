@@ -68,6 +68,39 @@ public sealed class Settings
     public bool InputHidapiPlayStation { get; set; } = true;
     public bool InputHidapiSwitch { get; set; } = true;
 
+    /// <summary>FR-42: 名前 → { overlay, history_rows, stats_rows }。値は当てるときに Parse で確かめる。</summary>
+    public Dictionary<string, JsonObject> Profiles { get; set; } = [];
+    public const int MaxProfiles = 20;
+
+    public static bool IsProfileName(string name) => name.Trim().Length is >= 1 and <= 30;
+
+    /// <summary>今の overlay と行の設定を、その名前で残す。名前が不正か、21 個目なら false。</summary>
+    public bool SaveProfile(string name)
+    {
+        name = name.Trim();
+        if (!IsProfileName(name) || (!Profiles.ContainsKey(name) && Profiles.Count >= MaxProfiles))
+            return false;
+        var root = JsonNode.Parse(ToJson())!;
+        Profiles[name] = new JsonObject
+        {
+            ["overlay"] = root["overlay"]!.DeepClone(),
+            ["history_rows"] = History.Rows,
+            ["stats_rows"] = root["stats"]!["rows"]!.DeepClone(),
+        };
+        return true;
+    }
+
+    /// <summary>プロファイルを当てた設定を返す(自分は変えない)。範囲の外の値はその項目だけ既定に戻る。</summary>
+    public Settings WithProfile(string name, out List<string> resetKeys)
+    {
+        var root = JsonNode.Parse(ToJson())!.AsObject();
+        var p = Profiles[name];
+        root["overlay"] = p["overlay"]!.DeepClone();
+        if (p["history_rows"] is { } hr) root["history"]!["rows"] = hr.DeepClone();
+        if (p["stats_rows"] is { } sr) root["stats"]!["rows"] = sr.DeepClone();
+        return Parse(root.ToJsonString(), out resetKeys, out _);
+    }
+
     public static IReadOnlyList<string> AllHistoryButtonKeys { get; } =
         [.. Enum.GetNames<PadButton>(), "LeftTrigger", "RightTrigger"];
 
@@ -148,6 +181,20 @@ public sealed class Settings
         s.InputWgi = r.Choice("input.wgi", ["default", "on", "off"], s.InputWgi);
         s.InputHidapiPlayStation = r.Bool("input.hidapi_playstation", true);
         s.InputHidapiSwitch = r.Bool("input.hidapi_switch", true);
+        // 形の違うプロファイルはそれだけ捨てる。ログには名前を出さない(利用者が付けた名前なので)
+        var profs = r.Get("profiles");
+        if (profs is JsonObject po)
+        {
+            foreach (var (name, node) in po)
+            {
+                if (s.Profiles.Count < MaxProfiles && IsProfileName(name) && node is JsonObject p && p["overlay"] is JsonObject)
+                    s.Profiles[name.Trim()] = (JsonObject)p.DeepClone();
+                else
+                    r.Reset("profiles");
+            }
+        }
+        else if (profs is not null)
+            r.Reset("profiles");
         s.SchemaVersion = 1;
         resetKeys = r.ResetKeys;
         return s;
@@ -200,6 +247,7 @@ public sealed class Settings
             ["export"] = new JsonObject { ["grindlog_game"] = GrindLogGame, ["grindlog_type"] = GrindLogType },
             ["hotkeys"] = new JsonObject { ["toggle"] = HotkeyToggle, ["arrange"] = HotkeyArrange, ["clear_history"] = HotkeyClearHistory },
             ["input"] = new JsonObject { ["wgi"] = InputWgi, ["hidapi_playstation"] = InputHidapiPlayStation, ["hidapi_switch"] = InputHidapiSwitch },
+            ["profiles"] = new JsonObject(Profiles.Select(kv => KeyValuePair.Create(kv.Key, (JsonNode?)kv.Value.DeepClone()))),
         };
         return o.ToJsonString(new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
     }

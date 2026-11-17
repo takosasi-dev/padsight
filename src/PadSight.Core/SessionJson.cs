@@ -10,7 +10,8 @@ public static class SessionJson
 {
     public const int SchemaVersion = 1;
 
-    public static string ToLine(SessionRecord r, TimeZoneInfo tz)
+    /// <param name="withPerPad">current_session.json だけ true(§9.6.4)。sessions.jsonl の行には GUID ごとの回数を書かない</param>
+    public static string ToLine(SessionRecord r, TimeZoneInfo tz, bool withPerPad = false)
     {
         var buttons = new JsonObject();
         foreach (var kv in r.Buttons.Where(kv => kv.Value > 0))
@@ -30,6 +31,18 @@ public static class SessionJson
         };
         if (r.LastOperationUtc is { } last)
             o["lastOperation"] = Format(last, tz);
+        if (withPerPad)
+        {
+            var per = new JsonObject();
+            foreach (var (guid, t) in r.PerPad)
+            {
+                var pb = new JsonObject();
+                foreach (var kv in t.Buttons.Where(kv => kv.Value > 0))
+                    pb[kv.Key] = kv.Value;
+                per[guid] = new JsonObject { ["name"] = t.Name, ["kind"] = t.Kind, ["inputs"] = t.Inputs, ["buttons"] = pb };
+            }
+            o["perPad"] = per;
+        }
         return o.ToJsonString(new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
     }
 
@@ -57,6 +70,7 @@ public static class SessionJson
                 o["lastOperation"] is JsonNode lo ? ParseUtc(lo.GetValue<string>()) : null)
             {
                 PeakPerSecond = o["peakPerSecond"]?.GetValue<int>() ?? 0, // FR-37 より前の行は 0
+                PerPad = o["perPad"] is JsonObject per ? per.ToDictionary(kv => kv.Key, kv => ParseTally(kv.Value!)) : new Dictionary<string, PadTally>(),
             };
         }
         catch (Exception ex) when (ex is JsonException or FormatException or InvalidOperationException or NullReferenceException or ArgumentException)
@@ -64,6 +78,12 @@ public static class SessionJson
             return null;
         }
     }
+
+    static PadTally ParseTally(JsonNode n) => new(
+        n["name"]?.GetValue<string>() ?? "",
+        n["kind"]?.GetValue<string>() ?? "",
+        n["inputs"]!.GetValue<long>(),
+        n["buttons"] is JsonObject b ? b.ToDictionary(kv => kv.Key, kv => kv.Value!.GetValue<long>()) : new Dictionary<string, long>());
 
     /// <summary>"2026-11-17T20:15:03+09:00" の形。</summary>
     public static string Format(DateTime utc, TimeZoneInfo tz)

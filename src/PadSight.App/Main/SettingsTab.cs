@@ -103,16 +103,7 @@ public sealed class SettingsTab : UserControl
             MessageBox.Show(Window.GetWindow(this), "写しを読めませんでした", "PadSight");
             return;
         }
-        var app = App.Current;
-        var cur = app.Settings;
-        // 型が同じなので、JSON を通して中身ごと入れ替える
-        var copy = restored.Clone();
-        foreach (var p in typeof(PadSight.Core.Settings).GetProperties().Where(p => p.CanWrite))
-            p.SetValue(cur, p.GetValue(copy));
-        app.SaveSettings();
-        app.Panels.ApplyAll();
-        app.ApplyTheme();
-        app.RegisterHotkeys();
+        App.Current.ReplaceSettings(restored);
         Build();
     }
 
