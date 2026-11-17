@@ -1,4 +1,4 @@
-// S5 設定(画面設計書 §4.9・仕様書 FR-6・FR-8・FR-12・FR-29〜FR-34)。ホットキー、起動、入力の取り方、割り当て、
+// S5 設定(画面設計書 §4.9・仕様書 FR-6・FR-8・FR-12・FR-29〜FR-34・FR-48)。ホットキー、起動、入力の取り方、割り当て、
 // セッション、見た目、データ(設定の写し)、注意、このソフトについて(版と部品のライセンス)。
 // ホットキーの「変える」は、自分の窓が受けたキーだけを使う(グローバルなキーボードの読み取りはしない。INV-5)。
 using System.IO;
@@ -35,6 +35,7 @@ public sealed class SettingsTab : UserControl
         HotkeyRow("パネルの表示切替", App.HotkeyToggle, () => s.HotkeyToggle, v => s.HotkeyToggle = v);
         HotkeyRow("配置を直す", App.HotkeyArrange, () => s.HotkeyArrange, v => s.HotkeyArrange = v);
         HotkeyRow("入力履歴を消す", App.HotkeyClear, () => s.HotkeyClearHistory, v => s.HotkeyClearHistory = v);
+        HotkeyRow("入力履歴を止める", App.HotkeyPause, () => s.HotkeyPauseHistory, v => s.HotkeyPauseHistory = v); // FR-48
 
         _stack.Children.Add(Ui.Section("起動"));
         _stack.Children.Add(Ui.Check("ログオン時に起動する", AutoStart.IsEnabled(), AutoStart.Set));

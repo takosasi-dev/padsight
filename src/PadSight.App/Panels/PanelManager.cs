@@ -69,6 +69,28 @@ public sealed class PanelManager
 
     public void Toggle() => SetVisible(!Visible);
 
+    /// <summary>FR-48: 入力履歴のパネルの表示を止めているか。保存しないので、起動したときはいつも動いている。</summary>
+    public bool HistoryPaused { get; private set; }
+
+    HistoryView HistoryPanel => (HistoryView)_entries.First(e => e.Name == "history").View;
+
+    public void SetHistoryPaused(bool paused)
+    {
+        HistoryPaused = paused;
+        HistoryPanel.Paused = paused;
+        _lastVersion = -1; // 入力が無くても、次のフレームで「停止中」の出し入れと行の入れ替えを描く
+        StateChanged?.Invoke();
+    }
+
+    /// <summary>止めている間に入力履歴を消したら、出している行も消す(止めたまま。動かすと消した後の行が出る)。</summary>
+    public void ClearPausedHistory()
+    {
+        if (!HistoryPaused)
+            return;
+        HistoryPanel.ClearFrozen();
+        _lastVersion = -1;
+    }
+
     bool _suspended;
 
     /// <summary>トレイのメニューを開いている間だけ、表示の状態を変えずにパネルを隠す(メニューにパネルが被らないように)。</summary>
