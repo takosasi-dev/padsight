@@ -26,7 +26,7 @@ public sealed class StatsTab : UserControl
     readonly Button _openFolder;
     readonly ListView _list = new() { MinHeight = 200 };
     readonly TextBlock _empty = Ui.Weak("この期間の記録はありません");
-    readonly ListView _padList = new() { MinHeight = 80 };
+    readonly ListView _padList = new() { MinHeight = 80, VerticalAlignment = VerticalAlignment.Top }; // 横の絵の高さまで伸びないように
     readonly TextBlock _padEmpty = Ui.Weak("まだ記録がありません");
     // FR-47: 選んだパッドの絵(重ねるパネルとは別の PadView)。パネルの色で描くので、地はパネルの地の色にする
     readonly PadView _heat = new();
