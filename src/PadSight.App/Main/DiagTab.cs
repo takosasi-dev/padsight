@@ -1,8 +1,9 @@
-// S3 スティック診断(画面設計書 §4.7・仕様書 §9.9・FR-23)。手を離したときのずれと、外周の形を測る。
-// 値は描画のたびにスナップショットから集め、計算は Core の StickDiagnostics が行う。結果は保存しない。Esc で止める。
+// S3 スティック診断(画面設計書 §4.7・仕様書 §9.9・§9.18・FR-23・FR-45・FR-46)。手を離したときのずれ、外周の形、トリガーの範囲を測り、ボタンの検査の表を出す。
+// 値は描画のたびにスナップショットから集め、計算は Core の StickDiagnostics と ChatterCounter が行う。結果は保存しない。Esc で止める。
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using PadSight.Core;
@@ -12,18 +13,21 @@ namespace PadSight.App.Main;
 public sealed class DiagTab : UserControl
 {
     const double R = 100;
-    enum Phase { Idle, DriftWait, Drift, Outer }
+    enum Phase { Idle, DriftWait, Drift, Outer, Trigger }
 
     readonly ComboBox _pad = new() { MinWidth = 280 };
     readonly RadioButton _left = new() { Content = "左", IsChecked = true, Margin = new Thickness(0, 0, 12, 0) };
     readonly RadioButton _right = new() { Content = "右" };
-    readonly Button _driftBtn, _outerBtn;
+    readonly Button _driftBtn, _outerBtn, _trigBtn;
     readonly Canvas _fig = new() { Width = 240, Height = 240, Background = Brushes.Black, ClipToBounds = true };
     readonly Ellipse _dot = new() { Width = 8, Height = 8, Fill = Brushes.White };
     readonly Polyline _outline = new() { Stroke = Brushes.Orange, StrokeThickness = 2 };
     readonly TextBlock _status = Ui.Text();
     readonly TextBlock _result = Ui.Text();
     readonly List<StickValue> _samples = [];
+    readonly List<float> _lt = [], _rt = [];
+    readonly Grid _chatter = new() { Margin = new Thickness(0, 4, 0, 4) };
+    string? _chatterKey;
     Phase _phase;
     DateTime _phaseEnd;
     string _padsKey = "";
@@ -32,6 +36,7 @@ public sealed class DiagTab : UserControl
     {
         _driftBtn = Ui.Button("手を離して測る", StartDrift);
         _outerBtn = Ui.Button("外周を測る", StartOuter);
+        _trigBtn = Ui.Button("トリガーを測る", StartTrigger);
         _fig.Children.Add(new Ellipse { Width = R * 2, Height = R * 2, Stroke = Brushes.Gray, StrokeThickness = 1 }.At2(120 - R, 120 - R));
         _fig.Children.Add(new Line { X1 = 20, X2 = 220, Y1 = 120, Y2 = 120, Stroke = Brushes.DimGray });
         _fig.Children.Add(new Line { X1 = 120, X2 = 120, Y1 = 20, Y2 = 220, Stroke = Brushes.DimGray });
@@ -48,10 +53,17 @@ public sealed class DiagTab : UserControl
         grid.Children.Add(res);
         var stack = new StackPanel();
         stack.Children.Add(Ui.Horizontal(Ui.Text("パッド "), _pad, Ui.Text("   スティック "), _left, _right));
-        stack.Children.Add(Ui.Horizontal(_driftBtn, _outerBtn));
+        stack.Children.Add(Ui.Horizontal(_driftBtn, _outerBtn, _trigBtn));
         stack.Children.Add(_status);
         stack.Children.Add(grid);
         stack.Children.Add(Ui.Weak("値は SDL を通した値で、ゲームが受け取る値と同じとは限りません"));
+        stack.Children.Add(Ui.Section("ボタンの検査"));
+        stack.Children.Add(Ui.Text("ボタンを 1 回ずつ押してください。1 回しか押していないのに 2 回に数えられたら、ボタンの接点がへたっているかもしれません"));
+        for (int i = 0; i < 3; i++)
+            _chatter.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        stack.Children.Add(_chatter);
+        stack.Children.Add(Ui.Horizontal(Ui.Button("数え直す", () => App.Current.PostToInput(e => e.ResetChatter()))));
+        stack.Children.Add(Ui.Weak("離してから 15 ミリ秒未満で押されたときに数えます。0 回でも壊れていないとは限りません"));
         Content = Ui.Scroll(stack);
     }
 
@@ -61,6 +73,9 @@ public sealed class DiagTab : UserControl
             return null;
         return _left.IsChecked == true ? st.Left : st.Right;
     }
+
+    PadLive? SelectedLive(PadSnapshot s) =>
+        _pad.SelectedItem is ComboBoxItem { Tag: uint id } && s.Live.TryGetValue(id, out var l) ? l : null;
 
     void StartDrift()
     {
@@ -76,11 +91,20 @@ public sealed class DiagTab : UserControl
         _phaseEnd = DateTime.UtcNow.AddSeconds(10);
     }
 
+    void StartTrigger()
+    {
+        Cancel();
+        _phase = Phase.Trigger;
+        _phaseEnd = DateTime.UtcNow.AddSeconds(10);
+    }
+
     /// <summary>止めたら結果を出さない。</summary>
     public void Cancel()
     {
         _phase = Phase.Idle;
         _samples.Clear();
+        _lt.Clear();
+        _rt.Clear();
         _status.Text = "";
         _outline.Points = [];
     }
@@ -97,8 +121,9 @@ public sealed class DiagTab : UserControl
                 _pad.Items.Add(new ComboBoxItem { Content = p.Name, Tag = p.InstanceId });
             _pad.SelectedIndex = Math.Max(0, _pad.Items.Cast<ComboBoxItem>().ToList().FindIndex(i => Equals(i.Tag, sel)));
         }
+        RenderChatter(SelectedLive(s)?.Info, s);
         var v = Current(s);
-        _driftBtn.IsEnabled = _outerBtn.IsEnabled = v is not null;
+        _driftBtn.IsEnabled = _outerBtn.IsEnabled = _trigBtn.IsEnabled = v is not null;
         if (v is not StickValue cur)
         {
             _status.Text = "パッドが見つかりません";
@@ -145,6 +170,69 @@ public sealed class DiagTab : UserControl
                     if (!o.Insufficient) DrawOutline(keep);
                 }
                 break;
+            case Phase.Trigger when SelectedLive(s) is PadLive lv:
+                _lt.Add(lv.LeftTrigger);
+                _rt.Add(lv.RightTrigger);
+                _status.Text = $"左右のトリガーを奥まで引いて、離してください。何回か繰り返してください。残り {left} 秒\n"
+                    + $"左 {Pct(lv.LeftTrigger)}%   右 {Pct(lv.RightTrigger)}%";
+                if (left <= 0)
+                {
+                    _result.Text = $"左: {Range(_lt)}\n右: {Range(_rt)}";
+                    Cancel();
+                }
+                break;
+        }
+    }
+
+    static string Pct(float v) => (v * 100f).ToString("0", CultureInfo.InvariantCulture);
+
+    static string Range(List<float> samples)
+    {
+        var r = StickDiagnostics.TriggerRange(samples);
+        return $"最小 {Pct(r.Min)}%、最大 {Pct(r.Max)}%({r.Verdict})";
+    }
+
+    /// <summary>ボタンの検査の表。選んだパッドの押したことのあるボタンだけ。数が変わったときだけ作り直す。</summary>
+    void RenderChatter(PadInfo? pad, PadSnapshot s)
+    {
+        var settings = App.Current.Settings;
+        var rows = new List<(string Name, ChatterCount Count)>();
+        if (pad is not null && s.Chatter.TryGetValue(pad.InstanceId, out var counts))
+        {
+            var skin = Labels.ChooseSkin(pad, settings.Devices.GetValueOrDefault(pad.Guid));
+            rows.AddRange(counts.OrderBy(kv => kv.Key).Select(kv => (Labels.For(kv.Key.ToString(), skin, settings.LabelStyle, pad), kv.Value)));
+        }
+        string key = string.Join("|", rows.Select(r => $"{r.Name}:{r.Count.Presses}:{r.Count.Short}"));
+        if (key == _chatterKey)
+            return;
+        _chatterKey = key;
+        _chatter.Children.Clear();
+        _chatter.RowDefinitions.Clear();
+        AddChatterRow("ボタン", "押した回数", "すぐにまた押された回数", header: true, warn: false);
+        var inv = CultureInfo.InvariantCulture;
+        foreach (var (name, c) in rows)
+            AddChatterRow(name, c.Presses.ToString(inv), c.Short.ToString(inv), header: false, warn: c.Short >= 1);
+    }
+
+    void AddChatterRow(string name, string presses, string shorts, bool header, bool warn)
+    {
+        int row = _chatter.RowDefinitions.Count;
+        _chatter.RowDefinitions.Add(new RowDefinition());
+        string[] cells = [name, presses, shorts];
+        for (int col = 0; col < 3; col++)
+        {
+            var t = Ui.Text(cells[col]);
+            t.Margin = new Thickness(0, 2, 24, 2);
+            if (header) t.FontWeight = FontWeights.SemiBold;
+            if (col > 0 && !header)
+            {
+                t.HorizontalAlignment = HorizontalAlignment.Right;
+                Typography.SetNumeralAlignment(t, FontNumeralAlignment.Tabular);
+            }
+            if (warn) t.SetResourceReference(TextBlock.ForegroundProperty, "WarningBrush");
+            Grid.SetRow(t, row);
+            Grid.SetColumn(t, col);
+            _chatter.Children.Add(t);
         }
     }
 
