@@ -64,6 +64,8 @@ public sealed class Settings
     public string? HotkeyToggle { get; set; } = "Ctrl+Alt+G";
     public string? HotkeyArrange { get; set; } = "Ctrl+Alt+J";
     public string? HotkeyClearHistory { get; set; } = "Ctrl+Alt+H";
+    /// <summary>FR-48: 入力履歴を止める・動かす。</summary>
+    public string? HotkeyPauseHistory { get; set; } = "Ctrl+Alt+F";
     public string InputWgi { get; set; } = "default";
     public bool InputHidapiPlayStation { get; set; } = true;
     public bool InputHidapiSwitch { get; set; } = true;
@@ -180,6 +182,7 @@ public sealed class Settings
         s.HotkeyToggle = r.Hotkey("hotkeys.toggle", s.HotkeyToggle);
         s.HotkeyArrange = r.Hotkey("hotkeys.arrange", s.HotkeyArrange);
         s.HotkeyClearHistory = r.Hotkey("hotkeys.clear_history", s.HotkeyClearHistory);
+        s.HotkeyPauseHistory = r.Hotkey("hotkeys.pause_history", s.HotkeyPauseHistory);
         s.InputWgi = r.Choice("input.wgi", ["default", "on", "off"], s.InputWgi);
         s.InputHidapiPlayStation = r.Bool("input.hidapi_playstation", true);
         s.InputHidapiSwitch = r.Bool("input.hidapi_switch", true);
@@ -248,7 +251,7 @@ public sealed class Settings
                 ["rows"] = new JsonArray([.. StatsRows.Select(x => (JsonNode)x)]),
             },
             ["export"] = new JsonObject { ["grindlog_game"] = GrindLogGame, ["grindlog_type"] = GrindLogType },
-            ["hotkeys"] = new JsonObject { ["toggle"] = HotkeyToggle, ["arrange"] = HotkeyArrange, ["clear_history"] = HotkeyClearHistory },
+            ["hotkeys"] = new JsonObject { ["toggle"] = HotkeyToggle, ["arrange"] = HotkeyArrange, ["clear_history"] = HotkeyClearHistory, ["pause_history"] = HotkeyPauseHistory },
             ["input"] = new JsonObject { ["wgi"] = InputWgi, ["hidapi_playstation"] = InputHidapiPlayStation, ["hidapi_switch"] = InputHidapiSwitch },
             ["update"] = new JsonObject { ["check_on_start"] = UpdateCheckOnStart },
             ["profiles"] = new JsonObject(Profiles.Select(kv => KeyValuePair.Create(kv.Key, (JsonNode?)kv.Value.DeepClone()))),

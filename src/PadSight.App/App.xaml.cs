@@ -19,7 +19,7 @@ public sealed record Banner(string Key, string Text, string Kind, string? Action
 
 public partial class App : Application
 {
-    public const int HotkeyToggle = 1, HotkeyArrange = 2, HotkeyClear = 3;
+    public const int HotkeyToggle = 1, HotkeyArrange = 2, HotkeyClear = 3, HotkeyPause = 4;
 
     public static string DataDir { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PadSight");
     public static string Version { get; } = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
@@ -31,7 +31,7 @@ public partial class App : Application
     HotkeyHost _hotkeys = null!;
     TaskbarIcon _tray = null!;
     MainWindow? _main;
-    MenuItem _menuToggle = null!, _menuArrange = null!;
+    MenuItem _menuToggle = null!, _menuArrange = null!, _menuPause = null!;
     string _tooltip = "";
     Measure? _measure;
     bool _renderHooked, _quitting;
@@ -179,7 +179,14 @@ public partial class App : Application
         t.Start();
     }
 
-    public void ClearHistory() => _input.Post(engine => engine.ClearHistory());
+    public void ClearHistory()
+    {
+        _input.Post(engine => engine.ClearHistory());
+        Panels.ClearPausedHistory(); // 止めている間に消したら、出している行も消す(FR-48)
+    }
+
+    /// <summary>FR-48: 入力履歴のパネルの表示を止める・動かす。保存しない。</summary>
+    public void TogglePauseHistory() => Panels.SetHistoryPaused(!Panels.HistoryPaused);
 
     public void SetBanner(string key, string text, string kind, string? actionText = null, Action? onAction = null)
     {
@@ -240,10 +247,10 @@ public partial class App : Application
 
     public void ApplyTheme() => Theme.Apply(Settings.Theme);
 
-    /// <summary>3 つのホットキーを登録し直す。失敗しても別の組み合わせへ振り替えない(§9.11)。</summary>
+    /// <summary>4 つのホットキーを登録し直す。失敗しても別の組み合わせへ振り替えない(§9.11)。</summary>
     public void RegisterHotkeys()
     {
-        foreach (var (id, combo) in new[] { (HotkeyToggle, Settings.HotkeyToggle), (HotkeyArrange, Settings.HotkeyArrange), (HotkeyClear, Settings.HotkeyClearHistory) })
+        foreach (var (id, combo) in new[] { (HotkeyToggle, Settings.HotkeyToggle), (HotkeyArrange, Settings.HotkeyArrange), (HotkeyClear, Settings.HotkeyClearHistory), (HotkeyPause, Settings.HotkeyPauseHistory) })
         {
             ClearBanner("hotkey" + id);
             if (combo is null)
@@ -266,7 +273,7 @@ public partial class App : Application
 
     public void UnregisterHotkeys()
     {
-        foreach (var id in new[] { HotkeyToggle, HotkeyArrange, HotkeyClear })
+        foreach (var id in new[] { HotkeyToggle, HotkeyArrange, HotkeyClear, HotkeyPause })
             _hotkeys.Unregister(id);
     }
 
@@ -277,6 +284,7 @@ public partial class App : Application
             case HotkeyToggle: Panels.Toggle(); break;
             case HotkeyArrange: Panels.SetArranging(!Panels.Arranging); break;
             case HotkeyClear: ClearHistory(); break;
+            case HotkeyPause: TogglePauseHistory(); break;
         }
     }
 
@@ -319,6 +327,8 @@ public partial class App : Application
         _menuArrange.Click += (_, _) => Panels.SetArranging(!Panels.Arranging);
         var clear = new MenuItem { Header = "入力履歴を消す" };
         clear.Click += (_, _) => ClearHistory();
+        _menuPause = new MenuItem { Header = "入力履歴を止める" };
+        _menuPause.Click += (_, _) => TogglePauseHistory();
         var open = new MenuItem { Header = "メインの画面を開く" };
         open.Click += (_, _) => OpenMain();
         var exit = new MenuItem { Header = "終了" };
@@ -326,7 +336,7 @@ public partial class App : Application
         var menu = new ContextMenu();
         menu.Opened += (_, _) => Panels.Suspend(true);
         menu.Closed += (_, _) => Panels.Suspend(false);
-        foreach (var item in new[] { _menuToggle, _menuArrange, clear, open, exit })
+        foreach (var item in new[] { _menuToggle, _menuArrange, clear, _menuPause, open, exit })
             menu.Items.Add(item);
         _tray = new TaskbarIcon
         {
@@ -343,6 +353,7 @@ public partial class App : Application
     {
         _menuToggle.Header = Panels.Visible ? "パネルを隠す" : "パネルを表示";
         _menuArrange.Header = Panels.Arranging ? "配置を終える" : "配置を直す";
+        _menuPause.Header = Panels.HistoryPaused ? "入力履歴を動かす" : "入力履歴を止める";
     }
 
     /// <summary>描画のループ(`CompositionTarget.Rendering`)は、つないでいる間 WPF が毎フレーム描くので、パネルかメインの画面が出ている間だけつなぐ(D-9)。</summary>
