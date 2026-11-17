@@ -17,6 +17,7 @@ The user interface is in Japanese only.
 - **Stats**: session length, input count, inputs in the last 60 seconds, peak inputs per second (mashing speed) and per-button counts. Per-pad lifetime totals are kept too. Per-session totals are kept and can be viewed by period or exported as CSV
 - Panels let clicks through to the window below and never take focus. Hotkeys hide all panels, enter the arrange mode, and clear the history (defaults Ctrl+Alt+G / J / H)
 - Panels can be dragged, or rearranged in one click to the corners or stacked on the left or right
+- Panel color themes: Classic, Neon, Light, High contrast, and a custom theme with your own background, line and text colors
 - Lives in the system tray and can start at sign-in
 
 ![Main window (home)](docs/images/home.png)
@@ -81,7 +82,7 @@ Data lives in `%LOCALAPPDATA%\PadSight\` (settings, session totals, logs). To ad
 
 ## Status
 
-v0.1.0 (in development). All features are in place and the unit tests (198) pass, but **it has not yet been tested with real pads**. The default input backend, the check that pads are left unchanged, and performance measurements are still to be done on real hardware.
+v0.1.0 (in development). All features are in place and the unit tests (203) pass, but **it has not yet been tested with real pads**. The default input backend, the check that pads are left unchanged, and performance measurements are still to be done on real hardware.
 
 ## License
 

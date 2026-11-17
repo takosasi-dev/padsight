@@ -58,7 +58,7 @@ public sealed class HomeTab : UserControl
             }
         });
 
-        var miniBox = new Border { Child = new Viewbox { Child = _mini, Width = 216, Height = 144 }, Background = Brushes.Black, CornerRadius = new CornerRadius(8), Padding = new Thickness(8), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 8) };
+        var miniBox = new Border { Child = new Viewbox { Child = _mini, Width = 216, Height = 144 }, Background = Draw.Background, CornerRadius = new CornerRadius(8), Padding = new Thickness(8), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 8) };
 
         var stack = new StackPanel();
         stack.Children.Add(Ui.Horizontal(_toggle, _arrange, _check, Ui.Button("PadSight を終了", () => App.Current.Quit()), _checkText));

@@ -127,10 +127,32 @@ public class OverlayWindow : Window
         set { _scale.ScaleX = value; _scale.ScaleY = value; }
     }
 
-    /// <summary>背景の黒の濃さ(0〜1)。</summary>
+    double _backgroundOpacity = 0.85;
+    Color _backgroundColor = Colors.Black;
+
+    /// <summary>背景の濃さ(0〜1)。</summary>
     public double BackgroundOpacity
     {
-        set => _panel.Background = new SolidColorBrush(Color.FromArgb((byte)Math.Round(255 * Math.Clamp(value, 0, 1)), 0, 0, 0));
+        set { _backgroundOpacity = Math.Clamp(value, 0, 1); UpdateBackground(); }
+    }
+
+    /// <summary>背景の色(不透明度は BackgroundOpacity で決める)。</summary>
+    public Color BackgroundColor
+    {
+        set { _backgroundColor = value; UpdateBackground(); }
+    }
+
+    /// <summary>パネルの縁の色。</summary>
+    public Color BorderColor
+    {
+        set => _panel.BorderBrush = new SolidColorBrush(value);
+    }
+
+    void UpdateBackground()
+    {
+        var c = _backgroundColor;
+        c.A = (byte)Math.Round(255 * _backgroundOpacity);
+        _panel.Background = new SolidColorBrush(c);
     }
 
     public bool Arranging

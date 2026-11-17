@@ -42,6 +42,12 @@ public sealed class Settings
     public bool VisibleOnStart { get; set; } = true;
     public string PressedColor { get; set; } = "#FFC83D";
     public string LabelStyle { get; set; } = "pad";
+    /// <summary>パネルの配色テーマ(FR-39)。</summary>
+    public string PanelTheme { get; set; } = "classic";
+    public string CustomBackground { get; set; } = "#000000";
+    public string CustomLine { get; set; } = "#FFFFFF";
+    public string CustomText { get; set; } = "#FFFFFF";
+    public static readonly string[] PanelThemes = ["classic", "neon", "light", "contrast", "custom"];
     public Dictionary<string, PanelSettings> Panels { get; set; } = PanelNames.ToDictionary(n => n, _ => new PanelSettings());
     public string SelectionMode { get; set; } = "last_used";
     public string? PinnedGuid { get; set; }
@@ -76,8 +82,12 @@ public sealed class Settings
         newerSchema = r.Int("schemaVersion", 1, int.MaxValue, 1) > 1;
         s.Theme = r.Choice("theme", ["system", "light", "dark"], s.Theme);
         s.VisibleOnStart = r.Bool("overlay.visible_on_start", true);
-        s.PressedColor = r.Str("overlay.pressed_color", s.PressedColor, v => Regex.IsMatch(v, "^#[0-9A-Fa-f]{6}$"));
+        s.PressedColor = r.Str("overlay.pressed_color", s.PressedColor, IsColor);
         s.LabelStyle = r.Choice("overlay.label_style", ["pad", "xbox", "playstation"], s.LabelStyle);
+        s.PanelTheme = r.Choice("overlay.panel_theme", PanelThemes, s.PanelTheme);
+        s.CustomBackground = r.Str("overlay.custom_colors.background", s.CustomBackground, IsColor);
+        s.CustomLine = r.Str("overlay.custom_colors.line", s.CustomLine, IsColor);
+        s.CustomText = r.Str("overlay.custom_colors.text", s.CustomText, IsColor);
         foreach (var n in PanelNames)
         {
             var p = s.Panels[n];
@@ -164,7 +174,10 @@ public sealed class Settings
             ["theme"] = Theme,
             ["overlay"] = new JsonObject
             {
-                ["visible_on_start"] = VisibleOnStart, ["pressed_color"] = PressedColor, ["label_style"] = LabelStyle, ["panels"] = panels,
+                ["visible_on_start"] = VisibleOnStart, ["pressed_color"] = PressedColor, ["label_style"] = LabelStyle,
+                ["panel_theme"] = PanelTheme,
+                ["custom_colors"] = new JsonObject { ["background"] = CustomBackground, ["line"] = CustomLine, ["text"] = CustomText },
+                ["panels"] = panels,
             },
             ["selection"] = new JsonObject { ["mode"] = SelectionMode, ["pinned_guid"] = PinnedGuid },
             ["devices"] = devices,
@@ -194,6 +207,8 @@ public sealed class Settings
     public Settings Clone() => Parse(ToJson(), out _, out _);
 
     public IReadOnlyList<string> HistoryButtonKeys => History.Buttons ?? DefaultHistoryButtons;
+
+    public static bool IsColor(string v) => Regex.IsMatch(v, "^#[0-9A-Fa-f]{6}$");
 
     /// <summary>「修飾キー+キー」の形か。修飾キーの無い組み合わせは不可(FR-12)。</summary>
     public static bool IsValidHotkey(string v)

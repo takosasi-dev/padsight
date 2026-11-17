@@ -49,10 +49,10 @@ public sealed class StickView : PanelView
         var trail = new Line[Segments];
         for (int i = 0; i < Segments; i++)
         {
-            trail[i] = new Line { Stroke = Brushes.White, StrokeThickness = 2, Visibility = Visibility.Hidden };
+            trail[i] = new Line { Stroke = Draw.TextBrush, StrokeThickness = 2, Visibility = Visibility.Hidden };
             Canvas.Children.Add(trail[i]);
         }
-        var knob = new Ellipse { Width = 10, Height = 10, Fill = Brushes.White, RenderTransform = new TranslateTransform() };
+        var knob = new Ellipse { Width = 10, Height = 10, Fill = Draw.TextBrush, RenderTransform = new TranslateTransform() };
         Canvas.Children.Add(knob.At(cx - 5, cy - 5));
         var xy = Draw.Text("", 12, mono: true).At(ox, 124);
         var mag = Draw.Text("", 12, mono: true).At(ox, 142);
@@ -89,7 +89,7 @@ public sealed class StickView : PanelView
         var t = (TranslateTransform)side.Knob.RenderTransform;
         t.X = v.X * R;
         t.Y = -v.Y * R;
-        side.Knob.Fill = pressed ? Draw.Pressed(st) : Brushes.White;
+        side.Knob.Fill = pressed ? Draw.Pressed(st) : Draw.TextBrush;
 
         // 軌跡: 直近 trail_ms の点を、最大 64 本の線に間引いて結ぶ
         var pts = trail.Where(p => nowNs < p.Ns || nowNs - p.Ns <= (ulong)st.TrailMs * Values.NsPerMs).ToList();

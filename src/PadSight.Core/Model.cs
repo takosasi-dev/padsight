@@ -36,7 +36,8 @@ public sealed record RawHatChanged(ulong TimestampNs, uint InstanceId, int Index
 /// <summary>X は右が +、Y は上が +(§9.4)。</summary>
 public readonly record struct StickValue(float X, float Y, short RawX, short RawY)
 {
-    public static StickValue FromRaw(short rawX, short rawY) => new(Values.Axis(rawX), -Values.Axis(rawY), rawX, rawY);
+    // 0f - … で反転する(-… だと 0 がマイナスの 0 になり、"-+0.000" と出てしまう)
+    public static StickValue FromRaw(short rawX, short rawY) => new(Values.Axis(rawX), 0f - Values.Axis(rawY), rawX, rawY);
     public float Magnitude => MathF.Min(1f, MathF.Sqrt(X * X + Y * Y));
     /// <summary>0〜360 度。右が 0、反時計回り。</summary>
     public float AngleDeg => Values.Angle(X, Y);

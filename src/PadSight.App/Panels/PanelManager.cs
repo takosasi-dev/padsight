@@ -123,6 +123,11 @@ public sealed class PanelManager
         e.Window.PanelScale = p.Scale / 100.0;
         e.Window.Opacity = p.Opacity / 100.0;
         e.Window.BackgroundOpacity = p.BackgroundOpacity / 100.0;
+        Draw.ApplyTheme(s);
+        e.Window.BackgroundColor = Draw.Palette.Background;
+        var border = Draw.Palette.Line;
+        border.A = 90; // 線の色の 35%
+        e.Window.BorderColor = border;
         bool show = Visible && p.Visible && !_suspended;
         if (show && !e.Window.IsVisible)
         {
@@ -263,6 +268,7 @@ public sealed class PanelManager
         bool changed = s.Version != _lastVersion || force;
         _lastVersion = s.Version;
         var settings = _settings();
+        Draw.ApplyTheme(settings); // 配色テーマが変わっていれば色を入れ替える(FR-39)
         foreach (var e in _entries)
         {
             if (e.Window.IsVisible && (changed || e.View.Animating(s)))

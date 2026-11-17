@@ -37,7 +37,7 @@ public sealed class PanelsTab : UserControl
         var scroll = Ui.Scroll(_settingsHost);
         Grid.SetColumn(scroll, 1);
         grid.Children.Add(scroll);
-        var preview = new Border { Child = _previewBox, Background = Brushes.Black, CornerRadius = new CornerRadius(8), Margin = new Thickness(0, 16, 16, 16), Padding = new Thickness(8), VerticalAlignment = VerticalAlignment.Top };
+        var preview = new Border { Child = _previewBox, Background = Draw.Background, CornerRadius = new CornerRadius(8), Margin = new Thickness(0, 16, 16, 16), Padding = new Thickness(8), VerticalAlignment = VerticalAlignment.Top };
         Grid.SetColumn(preview, 2);
         grid.Children.Add(preview);
         Content = grid;
@@ -58,6 +58,21 @@ public sealed class PanelsTab : UserControl
         string name = Selected;
         var p = s.Panels[name];
         var stack = new StackPanel();
+        // FR-39: 4 枚に共通の配色テーマ。選ぶと押したときの色もおすすめの色にする
+        stack.Children.Add(Ui.Row("パネルの配色(4 枚共通)", Ui.Combo(PanelTheme.Choices, s.PanelTheme, v =>
+        {
+            s.PanelTheme = v;
+            if (PanelTheme.RecommendedPressed(v) is { } pressed)
+                s.PressedColor = pressed;
+            Changed();
+            Build();
+        })));
+        if (s.PanelTheme == "custom")
+        {
+            stack.Children.Add(ColorRow("背景の色", s.CustomBackground, v => s.CustomBackground = v));
+            stack.Children.Add(ColorRow("線の色", s.CustomLine, v => s.CustomLine = v));
+            stack.Children.Add(ColorRow("文字の色", s.CustomText, v => s.CustomText = v));
+        }
         stack.Children.Add(Ui.Horizontal(Ui.Button("全部のパネルを見やすい設定にする(不透明度 100%・背景 85%)", () =>
         {
             foreach (var ps in s.Panels.Values) { ps.Opacity = 100; ps.BackgroundOpacity = 85; }
@@ -81,6 +96,24 @@ public sealed class PanelsTab : UserControl
         _settingsHost.Content = stack;
         _previewBox.Child = _previews[name];
         _dirty = true;
+    }
+
+    /// <summary>#RRGGBB を入れる欄と色見本。形が正しいときだけ効かせる。</summary>
+    UIElement ColorRow(string label, string value, Action<string> set)
+    {
+        var swatch = new Border { Width = 22, Height = 22, Margin = new Thickness(8, 0, 0, 0), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(3) };
+        swatch.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+        swatch.Background = (Brush)new BrushConverter().ConvertFromString(value)!;
+        var box = new TextBox { Text = value, Width = 90, MaxLength = 7 };
+        box.TextChanged += (_, _) =>
+        {
+            if (!Settings.IsColor(box.Text))
+                return;
+            set(box.Text.ToUpperInvariant());
+            swatch.Background = (Brush)new BrushConverter().ConvertFromString(box.Text)!;
+            Changed();
+        };
+        return Ui.Row(label, Ui.Horizontal(box, swatch));
     }
 
     /// <summary>位置を数で入れる欄。今いるモニターの作業領域の左上からの DIP。Enter か欄を離れたときに動かす。</summary>

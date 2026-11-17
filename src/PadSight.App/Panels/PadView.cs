@@ -223,8 +223,8 @@ public sealed class PadView : PanelView
                         _ => Enum.TryParse<PadButton>(el.Key, out var b) && s.Pressed.Contains(b),
                     };
                     Draw.SetPressed(p.Shape!, down, pressedBrush);
-                    if (p.Label is not null) p.Label.Foreground = down ? Brushes.Black : Brushes.White;
-                    if (p.Arrow is not null) p.Arrow.Fill = down ? Brushes.Black : Brushes.White;
+                    if (p.Label is not null) p.Label.Foreground = down ? Draw.OnPressed(pressedBrush) : Draw.TextBrush;
+                    if (p.Arrow is not null) p.Arrow.Fill = down ? Draw.OnPressed(pressedBrush) : Draw.TextBrush;
                     break;
             }
         }
@@ -266,7 +266,7 @@ public sealed class PadView : PanelView
             Canvas.Children.Add(Draw.Text($"H{i + 1}", 11, mono: true).At(10 + i * 90, 172));
             var arrow = Draw.Arrow(16);
             Canvas.Children.Add(arrow.At(50 + i * 90, 181));
-            var dot = new Ellipse { Width = 5, Height = 5, Fill = Brushes.White }.At(48 + i * 90, 179);
+            var dot = new Ellipse { Width = 5, Height = 5, Fill = Draw.TextBrush }.At(48 + i * 90, 179);
             Canvas.Children.Add(dot);
         }
     }
@@ -280,7 +280,7 @@ public sealed class PadView : PanelView
         for (int i = 0; i < Math.Min(32, raw.Buttons.Count) && bi < _raw.Count; i++, bi++)
         {
             _raw[bi].Text = $"B{i + 1}{(raw.Buttons[i] ? "■" : "□")}";
-            _raw[bi].Foreground = raw.Buttons[i] ? Draw.Pressed(settings) : Brushes.White;
+            _raw[bi].Foreground = raw.Buttons[i] ? Draw.Pressed(settings) : Draw.TextBrush;
         }
         for (int i = 0; i < Math.Min(8, raw.Axes.Count) && bi < _raw.Count; i++, bi++)
             _raw[bi].Text = $"A{i + 1} {raw.Axes[i].ToString("+0.000;-0.000", inv)}";

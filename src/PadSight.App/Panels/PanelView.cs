@@ -17,7 +17,7 @@ public abstract class PanelView : UserControl
         Canvas = new Canvas { Width = width, Height = height, ClipToBounds = true };
         StatusText = new OutlineText
         {
-            Foreground = Brushes.White, FontSize = 16, FontFamily = Draw.Ui, HorizontalAlignment = HorizontalAlignment.Center,
+            Foreground = Draw.TextBrush, FontSize = 16, FontFamily = Draw.Ui, HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed,
         };
         var root = new Grid();
@@ -56,12 +56,11 @@ public abstract class PanelView : UserControl
 /// 影の効果(DropShadowEffect)はソフトウェア描画になるので使わない(TaskDeck 規約 §1.3)。</summary>
 public sealed class OutlineText : FrameworkElement
 {
-    static readonly Brush Halo = Draw.Freeze(new SolidColorBrush(Color.FromArgb(200, 0, 0, 0)));
     static readonly (double X, double Y)[] Offsets = [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)];
 
     string _text = "";
     List<(string Text, Brush Brush)>? _runs;
-    Brush _foreground = Brushes.White;
+    Brush _foreground = Draw.TextBrush;
     double _fontSize = 12;
     FontFamily _fontFamily = Draw.Ui;
 
@@ -89,7 +88,7 @@ public sealed class OutlineText : FrameworkElement
     {
         var ft = new FormattedText(Text, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
             new Typeface(_fontFamily, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal), _fontSize,
-            halo ? Halo : _foreground, VisualTreeHelper.GetDpi(this).PixelsPerDip)
+            halo ? Draw.Halo : _foreground, VisualTreeHelper.GetDpi(this).PixelsPerDip)
         { TextAlignment = TextAlignment, Trimming = TextTrimming, MaxLineCount = 3 };
         if (!double.IsNaN(Width))
             ft.MaxTextWidth = Math.Max(1, Width - 2);
@@ -126,10 +125,40 @@ public static class Draw
 {
     public static readonly FontFamily Ui = new("Yu Gothic UI");
     public static readonly FontFamily Mono = new("Consolas");
-    public static readonly Brush Line = Freeze(new SolidColorBrush(Color.FromArgb(225, 255, 255, 255)));
-    public static readonly Brush Weak = Freeze(new SolidColorBrush(Color.FromArgb(185, 255, 255, 255)));
-    public static readonly Brush Faint = Freeze(new SolidColorBrush(Color.FromArgb(90, 255, 255, 255)));
+    // 配色テーマの色(FR-39)。凍らせずに使い回し、テーマを変えたら色だけを書き換える。UI のスレッドだけで触る
+    public static readonly SolidColorBrush Line = new(Color.FromArgb(225, 255, 255, 255));
+    public static readonly SolidColorBrush Weak = new(Color.FromArgb(185, 255, 255, 255));
+    public static readonly SolidColorBrush Faint = new(Color.FromArgb(90, 255, 255, 255));
+    public static readonly SolidColorBrush TextBrush = new(Colors.White);
+    public static readonly SolidColorBrush Halo = new(Color.FromArgb(200, 0, 0, 0));
+    /// <summary>メインの画面の見本・小さい表示の地(不透明)。</summary>
+    public static readonly SolidColorBrush Background = new(Colors.Black);
     public const double Thin = 2.0, Thick = 3.0;
+
+    static string _themeKey = "";
+
+    public static PanelPalette Palette { get; private set; } = PanelTheme.For(new Settings());
+
+    /// <summary>設定のテーマを色に入れる。変わったら真。</summary>
+    public static bool ApplyTheme(Settings s)
+    {
+        string key = $"{s.PanelTheme}|{s.CustomBackground}|{s.CustomLine}|{s.CustomText}";
+        if (key == _themeKey)
+            return false;
+        _themeKey = key;
+        Palette = PanelTheme.For(s);
+        Line.Color = Palette.Line;
+        Weak.Color = Palette.Weak;
+        Faint.Color = Palette.Faint;
+        TextBrush.Color = Palette.Text;
+        Halo.Color = Palette.Halo;
+        Background.Color = Palette.Background;
+        return true;
+    }
+
+    /// <summary>押したときの色で塗った中の文字・矢印の色(明るければ黒、暗ければ白)。</summary>
+    public static Brush OnPressed(Brush pressed) =>
+        pressed is SolidColorBrush b && PanelTheme.Luminance(b.Color) < 0.5 ? Brushes.White : Brushes.Black;
 
     static readonly Dictionary<string, Brush> PressedCache = [];
 
@@ -155,7 +184,7 @@ public static class Draw
 
     public static OutlineText Text(string text, double size = 12, bool mono = false) => new OutlineText
     {
-        Text = text, Foreground = Brushes.White, FontSize = size, FontFamily = mono ? Mono : Ui,
+        Text = text, Foreground = Draw.TextBrush, FontSize = size, FontFamily = mono ? Mono : Ui,
     };
 
     /// <summary>上向きの矢印(中心 0,0)。方向は RotateTransform で回す。文字ではなく図形で描く(画面設計書 §6)。</summary>
@@ -164,7 +193,7 @@ public static class Draw
         double s = size / 16;
         var geo = Geometry.Parse($"M 0,{-8 * s} L {6 * s},{-1 * s} L {2 * s},{-1 * s} L {2 * s},{8 * s} L {-2 * s},{8 * s} L {-2 * s},{-1 * s} L {-6 * s},{-1 * s} Z");
         geo.Freeze();
-        return new Path { Data = geo, Fill = Brushes.White, RenderTransform = new RotateTransform(0) };
+        return new Path { Data = geo, Fill = Draw.TextBrush, RenderTransform = new RotateTransform(0) };
     }
 
     /// <summary>テンキーの方向を、上を 0 とした時計回りの角度にする。5 は null。</summary>

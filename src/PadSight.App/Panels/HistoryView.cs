@@ -75,7 +75,7 @@ public sealed class HistoryView : PanelView
                 ((RotateTransform)row.Arrow.RenderTransform).Angle = a;
             row.Buttons.SetRuns(
                 h.NewlyPressed.Select(k => (Labels.For(k, skin, settings.LabelStyle, pad) + " ", pressed))
-                .Concat(h.Held.Select(k => ($"({Labels.For(k, skin, settings.LabelStyle, pad)}) ", Draw.Weak))));
+                .Concat(h.Held.Select(k => ($"({Labels.For(k, skin, settings.LabelStyle, pad)}) ", (Brush)Draw.Weak))));
         }
     }
 
@@ -93,11 +93,11 @@ public sealed class HistoryView : PanelView
             double y = 8 + i * RowHeight;
             var row = new Row
             {
-                Frames = new OutlineText { FontFamily = Draw.Mono, FontSize = 15, Foreground = Brushes.White, Width = 56, TextAlignment = TextAlignment.Right },
+                Frames = new OutlineText { FontFamily = Draw.Mono, FontSize = 15, Foreground = Draw.TextBrush, Width = 56, TextAlignment = TextAlignment.Right },
                 Arrow = Draw.Arrow(16),
-                Dot = new Ellipse { Width = 5, Height = 5, Fill = Brushes.White },
-                Number = new OutlineText { FontFamily = Draw.Mono, FontSize = 15, Foreground = Brushes.White },
-                Buttons = new OutlineText { FontFamily = Draw.Ui, FontSize = 15, Foreground = Brushes.White, Width = 150, TextTrimming = TextTrimming.CharacterEllipsis },
+                Dot = new Ellipse { Width = 5, Height = 5, Fill = Draw.TextBrush },
+                Number = new OutlineText { FontFamily = Draw.Mono, FontSize = 15, Foreground = Draw.TextBrush },
+                Buttons = new OutlineText { FontFamily = Draw.Ui, FontSize = 15, Foreground = Draw.TextBrush, Width = 150, TextTrimming = TextTrimming.CharacterEllipsis },
             };
             Canvas.Children.Add(row.Frames.At(4, y));
             Canvas.Children.Add(row.Arrow.At(78, y + 11));
