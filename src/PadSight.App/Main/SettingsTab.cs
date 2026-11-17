@@ -72,7 +72,7 @@ public sealed class SettingsTab : UserControl
             _mapNote = await app.DownloadMappings();
             // つなぎ直しが済んでから、上の件数の行を作り直す
             var later = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
-            later.Tick += (_, _) => { later.Stop(); Build(); };
+            later.Tick += (_, _) => { later.Stop(); CancelCapture(); Build(); }; // 作り直す前に、受け付けの途中なら取り消す
             later.Start();
             mapNote.Text = _mapNote;
         });
@@ -137,6 +137,7 @@ public sealed class SettingsTab : UserControl
 
     void Restore(string file, string when)
     {
+        CancelCapture(); // 受け付けの途中で写しを当てると、当てた後も受け付けが残る
         if (MessageBox.Show(Window.GetWindow(this), $"今の設定を、{when} の写しで置き換えます", "PadSight", MessageBoxButton.OKCancel) != MessageBoxResult.OK)
             return;
         if (SettingsStore.ReadBackup(file) is not { } restored)
@@ -184,6 +185,7 @@ public sealed class SettingsTab : UserControl
         });
         var off = Ui.Button("使わない", () =>
         {
+            CancelCapture(); // ほかの行の「変える」の受け付けの途中でも、ここで取り消す
             set(null);
             app.SaveSettings();
             app.RegisterHotkeys();

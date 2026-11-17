@@ -70,6 +70,8 @@ public sealed class MainWindow : Window
         UpdateState();
         PreviewKeyDown += OnKey;
         Closing += (_, e) => { e.Cancel = true; _diag.Cancel(); _measure.Cancel(); _settings.CancelCapture(); Hide(); };
+        // 受け付けの途中でゲームへ切り替えると、その間ホットキーが全部外れたままになるので取り消す
+        Deactivated += (_, _) => _settings.CancelCapture();
     }
 
     /// <summary>タブを選ぶ(0 から。2 はスティック診断)。帯のボタンから使う。</summary>
