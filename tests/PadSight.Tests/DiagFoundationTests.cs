@@ -76,4 +76,15 @@ public class DiagFoundationTests
         Assert.Null(DiagRecord.Parse("[]"));
         Assert.Null(DiagRecord.Parse("{\"kind\":1}"));
     }
+
+    [Fact]
+    public void DiagRecord_NonFiniteNumbers_AreWrittenSafely()
+    {
+        var r = new DiagRecord("stick_outer", "外周", DateTime.UtcNow, "Pad", "Xbox",
+            [new("平均", 0.9), new("欠け", double.NaN), new("無限", double.PositiveInfinity)], "", [0.9, double.NaN, 1.0], "0.1.0");
+        var back = DiagRecord.Parse(r.ToJson()); // NaN があっても例外にならない
+        Assert.NotNull(back);
+        Assert.Equal([new KeyValuePair<string, double>("平均", 0.9)], back.Values);
+        Assert.Equal([0.9, 0.0, 1.0], back.Shape); // データ無しは 0
+    }
 }

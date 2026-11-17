@@ -26,9 +26,10 @@ public sealed record DiagRecord(
             ["at"] = AtUtc.ToString("o"),
             ["pad"] = PadName,
             ["padKind"] = PadKind,
-            ["values"] = new JsonArray([.. Values.Select(kv => (JsonNode)new JsonObject { ["name"] = kv.Key, ["value"] = kv.Value })]),
+            // JSON は NaN・無限大を書けない(書こうとすると例外)。値は数でない物を外し、形は「データ無し」として 0 にする
+            ["values"] = new JsonArray([.. Values.Where(kv => double.IsFinite(kv.Value)).Select(kv => (JsonNode)new JsonObject { ["name"] = kv.Key, ["value"] = kv.Value })]),
             ["verdict"] = Verdict,
-            ["shape"] = new JsonArray([.. Shape.Select(v => (JsonNode)JsonValue.Create(v))]),
+            ["shape"] = new JsonArray([.. Shape.Select(v => (JsonNode)JsonValue.Create(double.IsFinite(v) ? v : 0))]),
             ["app"] = AppVersion,
         };
         return o.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
