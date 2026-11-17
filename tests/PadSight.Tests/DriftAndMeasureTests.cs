@@ -104,6 +104,15 @@ public class DriftAndMeasureTests
     }
 
     [Fact]
+    public void Drift_TimeGoingBack_ClearsWindow()
+    {
+        var w = new DriftWatch();
+        // 先の時刻の動いた値が窓に残ると、後の値がずっと「動いている」に見えてしまう。時刻が戻ったら窓を捨てる
+        w.Feed(1000 * T.S, 1, "Pad", V(0.5f), V(0), 0.10);
+        Assert.Single(Run(w, 60, _ => V(0.15f)));
+    }
+
+    [Fact]
     public void Rapid_EvenPresses()
     {
         // 100 ミリ秒ごとに 10 秒で 100 回(0, 100, …, 9900 ms)

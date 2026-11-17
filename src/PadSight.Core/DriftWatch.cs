@@ -45,11 +45,10 @@ public sealed class DriftWatch
             _sticks[(padId, isRight)] = st = new Stick();
         if (st.Decided)
             return null;
-        bool first = st.Recent.Count == 0;
-        ulong step = first || ns <= st.LastNs ? 0 : ns - st.LastNs;
-        if (step > MaxStepNs)
+        ulong step = st.Recent.Count == 0 || ns <= st.LastNs ? 0 : ns - st.LastNs;
+        if (step > MaxStepNs || ns < st.LastNs)
         {
-            st.Recent.Clear(); // 間が空いたら、前の値で「止まっている」と見ない
+            st.Recent.Clear(); // 間が空いた・時刻が戻ったら、前の値で「止まっている」と見ない
             step = 0;
         }
         st.LastNs = ns;

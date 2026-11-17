@@ -398,7 +398,8 @@ public partial class App : Application
             ClearBanner("sdl");
         if (s.DuplicateWarning) SetBannerOnce("dup", "同じ操作で 2 台が動いています。表示するパッドを固定してください", "Warning");
         else ClearBanner("dup");
-        if (!DemoRunning)
+        // デモの間と、止めた直後にまだデモのスナップショットが残っている間は見ない(本物のパッドを「外れた」と忘れないように)
+        if (!DemoRunning && !s.Pads.Any(p => p.InstanceId == DemoScript.Id))
             WatchDrift(s);
     }
 
