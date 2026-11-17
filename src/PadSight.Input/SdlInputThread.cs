@@ -10,10 +10,11 @@ namespace PadSight.Input;
 
 public sealed record InputOptions(string Wgi, bool HidapiPlayStation, bool HidapiSwitch);
 
-public sealed class SdlClock : IClock
+/// <summary>SDL の時計を TimeBase で続けて数えた物(E-29)。SDL のスレッドからだけ使う。</summary>
+public sealed class SdlClock(TimeBase time) : IClock
 {
     public DateTime UtcNow => DateTime.UtcNow;
-    public ulong MonotonicNs => SDL.GetTicksNS();
+    public ulong MonotonicNs => time.Map(SDL.GetTicksNS());
 }
 
 public sealed class SdlInputThread
@@ -31,8 +32,10 @@ public sealed class SdlInputThread
     readonly string? _mappingFile;
     readonly AutoResetEvent _wake = new(false);
     readonly InputEngine _engine;
+    readonly TimeBase _time = new();
     Thread? _thread;
     volatile bool _stop;
+    volatile bool _sdlReady; // 真の間だけ、Post で SDL の待ちを起こす
     InputOptions _options;
     InputOptions? _reconnectTo;
     int? _mappingCount;
@@ -52,7 +55,7 @@ public sealed class SdlInputThread
     public SdlInputThread(EngineConfig config, InputOptions options, string? mappingFile,
         Action<PadSnapshot> publish, Action<IReadOnlyList<SessionRecord>> finalized, Action<SessionRecord> checkpoint, Action<string> log)
     {
-        _engine = new InputEngine(new SdlClock(), config);
+        _engine = new InputEngine(new SdlClock(_time), config);
         _options = options;
         _mappingFile = mappingFile;
         _publish = publish;
@@ -71,28 +74,40 @@ public sealed class SdlInputThread
     public void Post(Action<InputEngine> command)
     {
         _commands.Enqueue(command);
+        Wake();
+    }
+
+    /// <summary>SDL のイベントを待っている間でも、すぐに頼みを見るように起こす(入力が無いと最大 250 ミリ秒待っていた)。</summary>
+    void Wake()
+    {
         _wake.Set();
+        if (_sdlReady)
+        {
+            // 自分のキューに積むだけで、パッドには何も送らない
+            var e = new SDL.Event { Type = (uint)SDL.EventType.User };
+            SDL.PushEvent(ref e);
+        }
     }
 
     /// <summary>デモの入力を流す・止める(FR-40)。</summary>
     public void SetDemo(bool on)
     {
         Volatile.Write(ref _demoRequest, on ? 1 : 0);
-        _wake.Set();
+        Wake();
     }
 
     /// <summary>入力の取り方を変えて、SDL を初期化し直す(FR-8)。</summary>
     public void Reconnect(InputOptions options)
     {
         _reconnectTo = options;
-        _wake.Set();
+        Wake();
     }
 
     /// <summary>今のセッションを確定し、SDL を止める。確定した集計は finalized で渡す。</summary>
     public void Stop()
     {
         _stop = true;
-        _wake.Set();
+        Wake();
         _thread?.Join(TimeSpan.FromSeconds(3));
     }
 
@@ -108,7 +123,7 @@ public sealed class SdlInputThread
             {
                 _reconnectTo = null;
                 Shutdown(keepSession: true);
-                _publish(_engine.Snapshot(0, Stopwatch.GetTimestamp(), InputStatus.Reconnecting));
+                _publish(_engine.Snapshot(_time.Map(0), Stopwatch.GetTimestamp(), InputStatus.Reconnecting));
                 _options = next;
                 ok = Init();
                 dirty = true;
@@ -150,7 +165,7 @@ public sealed class SdlInputThread
                     Handle(e);
                 dirty = true;
             }
-            ulong now = SDL.GetTicksNS();
+            ulong now = _time.Map(SDL.GetTicksNS());
             if (now - lastTick >= TickNs)
             {
                 lastTick = now;
@@ -200,11 +215,12 @@ public sealed class SdlInputThread
         if (!inited)
         {
             _log("SDL の初期化に失敗: " + err);
-            _publish(_engine.Snapshot(0, Stopwatch.GetTimestamp(), InputStatus.Failed, err));
+            _publish(_engine.Snapshot(_time.Map(0), Stopwatch.GetTimestamp(), InputStatus.Failed, err));
             return false;
         }
         _log($"SDL {SdlHints.SdlVersion()} を初期化した。ヒント: " +
             string.Join(", ", SdlHints.AllNames.Select(n => $"{n}={SDL.GetHint(n) ?? "(未設定)"}")));
+        _sdlReady = true;
         _mappingCount = null;
         if (_mappingFile is not null && File.Exists(_mappingFile))
         {
@@ -217,6 +233,8 @@ public sealed class SdlInputThread
 
     void Shutdown(bool keepSession)
     {
+        _sdlReady = false;
+        _time.BeforeRestart(SDL.GetTicksNS()); // 次の SDL_Init で時計が 0 に戻るので、ここまでの時刻を足しておく
         foreach (var (id, o) in _open)
         {
             if (o.IsGamepad) SDL.CloseGamepad(o.Handle); else SDL.CloseJoystick(o.Handle);
@@ -256,33 +274,33 @@ public sealed class SdlInputThread
         switch ((SDL.EventType)e.Type)
         {
             case SDL.EventType.GamepadAdded:
-                AddGamepad(e.GDevice.Which, e.GDevice.Timestamp);
+                AddGamepad(e.GDevice.Which, _time.Map(e.GDevice.Timestamp));
                 break;
             case SDL.EventType.JoystickAdded:
-                AddJoystick(e.JDevice.Which, e.JDevice.Timestamp);
+                AddJoystick(e.JDevice.Which, _time.Map(e.JDevice.Timestamp));
                 break;
             case SDL.EventType.GamepadRemoved:
-                Remove(e.GDevice.Which, e.GDevice.Timestamp, gamepad: true);
+                Remove(e.GDevice.Which, _time.Map(e.GDevice.Timestamp), gamepad: true);
                 break;
             case SDL.EventType.JoystickRemoved:
-                Remove(e.JDevice.Which, e.JDevice.Timestamp, gamepad: false);
+                Remove(e.JDevice.Which, _time.Map(e.JDevice.Timestamp), gamepad: false);
                 break;
             case SDL.EventType.GamepadButtonDown or SDL.EventType.GamepadButtonUp:
                 if (e.GButton.Button <= DeviceCatalog.MaxMappedButton)
-                    _engine.Apply(new ButtonChanged(e.GButton.Timestamp, e.GButton.Which, (PadButton)e.GButton.Button, e.GButton.Down));
+                    _engine.Apply(new ButtonChanged(_time.Map(e.GButton.Timestamp), e.GButton.Which, (PadButton)e.GButton.Button, e.GButton.Down));
                 break;
             case SDL.EventType.GamepadAxisMotion:
                 if (e.GAxis.Axis <= (byte)SDL.GamepadAxis.RightTrigger)
-                    _engine.Apply(new AxisChanged(e.GAxis.Timestamp, e.GAxis.Which, (PadAxis)e.GAxis.Axis, e.GAxis.Value));
+                    _engine.Apply(new AxisChanged(_time.Map(e.GAxis.Timestamp), e.GAxis.Which, (PadAxis)e.GAxis.Axis, e.GAxis.Value));
                 break;
             case SDL.EventType.JoystickButtonDown or SDL.EventType.JoystickButtonUp when IsRawJoystick(e.JButton.Which):
-                _engine.Apply(new RawButtonChanged(e.JButton.Timestamp, e.JButton.Which, e.JButton.Button, e.JButton.Down));
+                _engine.Apply(new RawButtonChanged(_time.Map(e.JButton.Timestamp), e.JButton.Which, e.JButton.Button, e.JButton.Down));
                 break;
             case SDL.EventType.JoystickAxisMotion when IsRawJoystick(e.JAxis.Which):
-                _engine.Apply(new RawAxisChanged(e.JAxis.Timestamp, e.JAxis.Which, e.JAxis.Axis, e.JAxis.Value));
+                _engine.Apply(new RawAxisChanged(_time.Map(e.JAxis.Timestamp), e.JAxis.Which, e.JAxis.Axis, e.JAxis.Value));
                 break;
             case SDL.EventType.JoystickHatMotion when IsRawJoystick(e.JHat.Which):
-                _engine.Apply(new RawHatChanged(e.JHat.Timestamp, e.JHat.Which, e.JHat.Hat, e.JHat.Value));
+                _engine.Apply(new RawHatChanged(_time.Map(e.JHat.Timestamp), e.JHat.Which, e.JHat.Hat, e.JHat.Value));
                 break;
             // センサーとタッチパッドのイベントは受けても捨てる(FR-2)
         }

@@ -31,6 +31,12 @@ public static partial class MappingDb
         }
         return windows >= MinWindowsLines ? windows : null;
     }
+
+    /// <summary>置く前に、`#` の行と Windows の行だけを残す(FR-43。上限の 1 MB に余裕を持たせる)。</summary>
+    public static string WindowsOnly(string text) =>
+        string.Concat(text.Split('\n').Select(l => l.TrimEnd('\r'))
+            .Where(l => l.StartsWith('#') || l.Contains("platform:Windows,", StringComparison.Ordinal))
+            .Select(l => l + "\n"));
 }
 
 public static class ReleaseCheck

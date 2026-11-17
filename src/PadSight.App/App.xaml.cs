@@ -34,6 +34,8 @@ public partial class App : Application
     MenuItem _menuToggle = null!, _menuArrange = null!;
     string _tooltip = "";
     Measure? _measure;
+    bool _renderHooked, _quitting;
+    System.Windows.Threading.DispatcherTimer? _statusTimer;
 
     public Settings Settings { get; private set; } = new();
     public SessionStore Sessions { get; private set; } = null!;
@@ -85,6 +87,7 @@ public partial class App : Application
         AppLog.Write("起動: 設定とセッションを読んだ");
         Panels = new PanelManager(() => Settings, SaveSettings);
         Panels.StateChanged += UpdateTrayMenu;
+        Panels.StateChanged += UpdateRenderHook;
         _input = new SdlInputThread(EngineConfig.From(Settings), InputOptionsFrom(Settings), MappingFile,
             Bus.Publish, Sessions.Append, Sessions.WriteCurrent, AppLog.Write);
         _input.Start();
@@ -100,7 +103,11 @@ public partial class App : Application
 
         if (Environment.GetEnvironmentVariable("PADSIGHT_MEASURE") == "1")
             _measure = new Measure();
-        System.Windows.Media.CompositionTarget.Rendering += OnRender;
+        // トレイの文字と帯は、描画のループと別に 250 ミリ秒ごとに見る(描画のループは何か出ている間だけ。D-9)
+        _statusTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _statusTimer.Tick += (_, _) => UpdateStatus();
+        _statusTimer.Start();
+        SessionEnding += (_, _) => Quit(); // E-32: サインアウト・シャットダウンでも今のセッションを確定する
 
         if (result == SettingsStore.LoadResult.Missing)
         {
@@ -194,7 +201,7 @@ public partial class App : Application
         try
         {
             Directory.CreateDirectory(DataDir);
-            File.WriteAllText(MappingFile + ".tmp", r.Text, new System.Text.UTF8Encoding(false));
+            File.WriteAllText(MappingFile + ".tmp", MappingDb.WindowsOnly(r.Text), new System.Text.UTF8Encoding(false));
             File.Move(MappingFile + ".tmp", MappingFile, overwrite: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -275,7 +282,11 @@ public partial class App : Application
 
     public void OpenMain()
     {
-        _main ??= new MainWindow();
+        if (_main is null)
+        {
+            _main = new MainWindow();
+            _main.IsVisibleChanged += (_, _) => UpdateRenderHook();
+        }
         _main.Show();
         if (_main.WindowState == WindowState.Minimized)
             _main.WindowState = WindowState.Normal;
@@ -284,8 +295,14 @@ public partial class App : Application
 
     public void Quit()
     {
+        if (_quitting)
+            return;
+        _quitting = true;
         AppLog.Write("終了");
-        System.Windows.Media.CompositionTarget.Rendering -= OnRender;
+        _statusTimer?.Stop();
+        if (_renderHooked)
+            System.Windows.Media.CompositionTarget.Rendering -= OnRender;
+        _renderHooked = false;
         _input.Stop();      // 今のセッションを確定して SDL を止める
         Sessions.Dispose(); // 残りの書き込みを終える
         _hotkeys.Dispose();
@@ -328,6 +345,17 @@ public partial class App : Application
         _menuArrange.Header = Panels.Arranging ? "配置を終える" : "配置を直す";
     }
 
+    /// <summary>描画のループ(`CompositionTarget.Rendering`)は、つないでいる間 WPF が毎フレーム描くので、パネルかメインの画面が出ている間だけつなぐ(D-9)。</summary>
+    void UpdateRenderHook()
+    {
+        bool need = !_quitting && (Panels.Visible || _main is { IsVisible: true } || _measure is not null);
+        if (need == _renderHooked)
+            return;
+        _renderHooked = need;
+        if (need) System.Windows.Media.CompositionTarget.Rendering += OnRender;
+        else System.Windows.Media.CompositionTarget.Rendering -= OnRender;
+    }
+
     void OnRender(object? sender, EventArgs e)
     {
         var s = Bus.Latest;
@@ -335,6 +363,13 @@ public partial class App : Application
         Panels.Render(s, now, force: false);
         if (_main is { IsVisible: true })
             _main.Render(s, now);
+        _measure?.OnRender(s, now);
+    }
+
+    /// <summary>トレイの文字と、SDL の失敗・2 台が同じ操作で動く帯を、今のスナップショットに合わせる。</summary>
+    void UpdateStatus()
+    {
+        var s = Bus.Latest;
         string tip = !Panels.Visible ? "PadSight  パネルを隠しています" : s.Pad is { } p ? $"PadSight  {p.Name}" : "PadSight  未接続";
         if (tip != _tooltip)
         {
@@ -351,7 +386,6 @@ public partial class App : Application
             ClearBanner("sdl");
         if (s.DuplicateWarning) SetBannerOnce("dup", "同じ操作で 2 台が動いています。表示するパッドを固定してください", "Warning");
         else ClearBanner("dup");
-        _measure?.OnRender(s, now);
     }
 
     void SetBannerOnce(string key, string text, string kind)
