@@ -67,6 +67,7 @@ public partial class App : Application
         _store.Backup(DateTime.UtcNow);
         var (settings, result) = _store.Load(DateTime.UtcNow);
         Settings = settings;
+        Theme.FollowNewWindows();
         Theme.Apply(Settings.Theme);
         if (result == SettingsStore.LoadResult.Broken)
             SetBanner("settings", "設定を読めなかったので、初めの値で起動しました", "Warning");

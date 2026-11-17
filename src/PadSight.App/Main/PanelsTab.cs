@@ -12,9 +12,9 @@ namespace PadSight.App.Main;
 
 public sealed class PanelsTab : UserControl
 {
-    readonly ListBox _list = new() { Width = 140, Margin = new Thickness(16, 16, 0, 16) };
+    readonly ListBox _list = new() { Width = 130, Margin = new Thickness(16, 16, 0, 16) };
     readonly ContentControl _settingsHost = new();
-    readonly Viewbox _previewBox = new() { MaxWidth = 300, MaxHeight = 300, VerticalAlignment = VerticalAlignment.Top };
+    readonly Viewbox _previewBox = new() { MaxWidth = 260, MaxHeight = 260, VerticalAlignment = VerticalAlignment.Top };
     readonly Dictionary<string, PanelView> _previews = new()
     {
         ["pad"] = new PadView(), ["history"] = new HistoryView(), ["stick"] = new StickView(), ["stats"] = new StatsView(),
@@ -32,7 +32,7 @@ public sealed class PanelsTab : UserControl
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition());
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(320) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(280) });
         grid.Children.Add(_list);
         var scroll = Ui.Scroll(_settingsHost);
         Grid.SetColumn(scroll, 1);
@@ -74,7 +74,7 @@ public sealed class PanelsTab : UserControl
             stack.Children.Add(ColorRow("線の色", s.CustomLine, v => s.CustomLine = v));
             stack.Children.Add(ColorRow("文字の色", s.CustomText, v => s.CustomText = v));
         }
-        stack.Children.Add(Ui.Horizontal(Ui.Button("全部のパネルを見やすい設定にする(不透明度 100%・背景 85%)", () =>
+        stack.Children.Add(Ui.Horizontal(Ui.Button("4 枚とも見やすくする(不透明度 100%・背景 85%)", () =>
         {
             foreach (var ps in s.Panels.Values) { ps.Opacity = 100; ps.BackgroundOpacity = 85; }
             Changed();
@@ -125,7 +125,7 @@ public sealed class PanelsTab : UserControl
                     _profileNote = $"『{name}』を当てました";
                     Build();
                 }),
-                Ui.Button("消す", () =>
+                Ui.Danger("消す", () =>
                 {
                     string name = _profileChoice!;
                     if (MessageBox.Show(Window.GetWindow(this), $"プロファイル『{name}』を消します", "PadSight", MessageBoxButton.OKCancel) != MessageBoxResult.OK)
@@ -213,7 +213,7 @@ public sealed class PanelsTab : UserControl
         var swatches = Ui.Horizontal();
         foreach (var c in new[] { "#FFC83D", "#FF5A5A", "#4FD1FF", "#7CFC7C", "#FF8AD8", "#FFFFFF" })
         {
-            var b = new Button { Width = 24, Height = 24, Margin = new Thickness(0, 0, 4, 0), Background = (Brush)new BrushConverter().ConvertFromString(c)!, ToolTip = c };
+            var b = new Button { Width = 26, Height = 26, MinHeight = 0, Padding = new Thickness(0), Margin = new Thickness(0, 0, 6, 0), Background = (Brush)new BrushConverter().ConvertFromString(c)!, ToolTip = c };
             b.Click += (_, _) => hex.Text = c;
             swatches.Children.Add(b);
         }

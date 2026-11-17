@@ -18,7 +18,7 @@ public sealed class DiagTab : UserControl
     readonly RadioButton _left = new() { Content = "左", IsChecked = true, Margin = new Thickness(0, 0, 12, 0) };
     readonly RadioButton _right = new() { Content = "右" };
     readonly Button _driftBtn, _outerBtn;
-    readonly Canvas _fig = new() { Width = 240, Height = 240, Background = Brushes.Black };
+    readonly Canvas _fig = new() { Width = 240, Height = 240, Background = Brushes.Black, ClipToBounds = true };
     readonly Ellipse _dot = new() { Width = 8, Height = 8, Fill = Brushes.White };
     readonly Polyline _outline = new() { Stroke = Brushes.Orange, StrokeThickness = 2 };
     readonly TextBlock _status = Ui.Text();

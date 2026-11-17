@@ -45,7 +45,7 @@ public sealed class HomeTab : UserControl
 
     public HomeTab()
     {
-        _toggle = Ui.Button("パネルを隠す", () => App.Current.Panels.Toggle());
+        _toggle = Ui.Primary("パネルを隠す", () => App.Current.Panels.Toggle());
         _arrange = Ui.Button("配置を直す", () => App.Current.Panels.SetArranging(!App.Current.Panels.Arranging));
         _check = Ui.Button("裏の入力を確かめる", StartCheck);
         _checkText.VerticalAlignment = VerticalAlignment.Center;
@@ -78,13 +78,21 @@ public sealed class HomeTab : UserControl
         var miniBox = new Border { Child = new Viewbox { Child = _mini, Width = 216, Height = 144 }, Background = Draw.Background, CornerRadius = new CornerRadius(8), Padding = new Thickness(8), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 8) };
 
         var stack = new StackPanel();
-        stack.Children.Add(Ui.Horizontal(_toggle, _arrange, _check, Ui.Button("PadSight を終了", () => App.Current.Quit()), _checkText));
-        stack.Children.Add(Ui.Horizontal(Ui.Text("まとめて置き直す  "),
+        // 主な操作は左に、終了(戻せない操作)は右端に離して置く
+        var quit = Ui.Danger("PadSight を終了", () => App.Current.Quit());
+        quit.Margin = new Thickness(8, 4, 0, 4);
+        var top = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(quit, Dock.Right);
+        top.Children.Add(quit);
+        top.Children.Add(Ui.Horizontal(_toggle, _arrange, _check, _checkText));
+        stack.Children.Add(top);
+        stack.Children.Add(Ui.Section("パネルの置き場所"));
+        stack.Children.Add(Ui.Row("まとめて置き直す", Ui.Horizontal(
             Ui.Button("四隅", () => App.Current.Panels.ArrangePreset("corners")),
             Ui.Button("左側に縦に並べる", () => App.Current.Panels.ArrangePreset("left")),
-            Ui.Button("右側に縦に並べる", () => App.Current.Panels.ArrangePreset("right")),
-            Ui.Text("   "), DemoButton()));
-        stack.Children.Add(Ui.Weak($"パネルの位置は「配置を直す」({App.Current.Settings.HotkeyArrange ?? "ホットキーなし"})のあと、ドラッグで動かせます。右下のつまみで大きさも変わります。次の起動でも同じ位置に出ます"));
+            Ui.Button("右側に縦に並べる", () => App.Current.Panels.ArrangePreset("right"))), 140));
+        stack.Children.Add(Ui.Weak($"1 枚ずつ動かすときは「配置を直す」({App.Current.Settings.HotkeyArrange ?? "ホットキーなし"})のあと、ドラッグで動かします。右下のつまみで大きさも変わります。次の起動でも同じ位置に出ます"));
+        stack.Children.Add(Ui.Row("パッドが無いとき", DemoButton(), 140));
         stack.Children.Add(Ui.Section("パッド"));
         stack.Children.Add(_list);
         stack.Children.Add(_empty);

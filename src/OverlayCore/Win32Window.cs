@@ -30,6 +30,21 @@ public static partial class Win32Window
     [StructLayout(LayoutKind.Sequential)]
     internal struct Rect32 { public int Left, Top, Right, Bottom; }
 
+    [LibraryImport("dwmapi.dll", EntryPoint = "DwmSetWindowAttribute")]
+    private static partial int DwmSetWindowAttribute(nint hWnd, int attribute, ref int value, int size);
+
+    const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
+    /// <summary>自分の窓の題名の帯を暗くする・戻す。窓ができる前(HWND が 0)と、対応していない古い Windows では何もしない。</summary>
+    public static void SetDarkTitleBar(Window w, bool dark)
+    {
+        nint h = Handle(w);
+        if (h == 0)
+            return;
+        int v = dark ? 1 : 0;
+        _ = DwmSetWindowAttribute(h, DWMWA_USE_IMMERSIVE_DARK_MODE, ref v, sizeof(int));
+    }
+
     static nint Handle(Window w) => new WindowInteropHelper(w).Handle;
 
     /// <summary>SourceInitialized で呼ぶ。タスクバーに出さない・前面にならない・クリックを通す。WS_EX_LAYERED は WPF に任せる。</summary>

@@ -20,7 +20,7 @@ public static class Ui
 
     public static TextBlock Weak(string text = "")
     {
-        var t = new TextBlock { Text = text, Margin = new Thickness(0, 4, 0, 4) };
+        var t = new TextBlock { Text = text, Margin = new Thickness(0, 4, 0, 4), VerticalAlignment = VerticalAlignment.Center };
         t.SetResourceReference(FrameworkElement.StyleProperty, "Weak");
         return t;
     }
@@ -32,19 +32,34 @@ public static class Ui
         return b;
     }
 
-    public static StackPanel Horizontal(params UIElement[] children)
+    /// <summary>画面の主な操作(画面に 1 つ)。</summary>
+    public static Button Primary(string text, Action onClick) => Styled(Button(text, onClick), "Primary");
+
+    /// <summary>終わる・消すなど戻せない操作。</summary>
+    public static Button Danger(string text, Action onClick) => Styled(Button(text, onClick), "Danger");
+
+    static Button Styled(Button b, string key)
     {
-        var s = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
+        b.SetResourceReference(FrameworkElement.StyleProperty, key);
+        return b;
+    }
+
+    /// <summary>横に並べる。幅が足りなければ次の行へ折り返す(欄の右が切れて見えなくならないように)。</summary>
+    public static WrapPanel Horizontal(params UIElement[] children)
+    {
+        var s = new WrapPanel { Margin = new Thickness(0, 2, 0, 2) };
         foreach (var c in children) s.Children.Add(c);
         return s;
     }
 
-    public static Grid Row(string label, UIElement control, double labelWidth = 180)
+    public static Grid Row(string label, UIElement control, double labelWidth = 170)
     {
-        var g = new Grid { Margin = new Thickness(0, 3, 0, 3) };
+        var g = new Grid { Margin = new Thickness(0, 4, 0, 4) };
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(labelWidth) });
         g.ColumnDefinitions.Add(new ColumnDefinition());
-        g.Children.Add(Text(label));
+        var l = Text(label);
+        l.Margin = new Thickness(0, 0, 12, 0);
+        g.Children.Add(l);
         Grid.SetColumn(control, 1);
         g.Children.Add(control);
         return g;
@@ -53,7 +68,7 @@ public static class Ui
     /// <summary>スライダーと数の表示。範囲の外は入らない(画面設計書 §4.6)。</summary>
     public static Grid Slider(string label, double min, double max, double step, double value, string format, Action<double> onChange)
     {
-        var s = new Slider { Minimum = min, Maximum = max, Value = value, SmallChange = step, LargeChange = step * 5, TickFrequency = step, IsSnapToTickEnabled = true, Width = 220, VerticalAlignment = VerticalAlignment.Center };
+        var s = new Slider { Minimum = min, Maximum = max, Value = value, SmallChange = step, LargeChange = step * 5, TickFrequency = step, IsSnapToTickEnabled = true, Width = 190, VerticalAlignment = VerticalAlignment.Center };
         var t = Text(value.ToString(format, CultureInfo.InvariantCulture));
         t.Margin = new Thickness(8, 0, 0, 0);
         t.MinWidth = 60;

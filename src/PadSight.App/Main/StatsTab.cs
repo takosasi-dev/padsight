@@ -46,8 +46,11 @@ public sealed class StatsTab : UserControl
             grid.Columns.Add(new GridViewColumn { Header = h, Width = w, DisplayMemberBinding = new Binding(p) });
         _list.View = grid;
         var stack = new StackPanel();
-        stack.Children.Add(Ui.Horizontal(Ui.Text("期間 "), _period, Ui.Text("   "), _split, _export, _exportNote));
+        stack.Children.Add(Ui.Horizontal(Ui.Text("期間  "), _period, Ui.Text("   "), _split, _export));
+        stack.Children.Add(_exportNote); // 長い文なので、ボタンの横ではなく次の行に折り返して出す
         stack.Children.Add(Ui.Horizontal(_done, _openFolder));
+        _totals.FontSize = 15;
+        _totals.Margin = new Thickness(0, 8, 0, 8);
         stack.Children.Add(_totals);
         stack.Children.Add(_list);
         stack.Children.Add(_empty);
@@ -90,7 +93,10 @@ public sealed class StatsTab : UserControl
         var data = DailyChart.Build(_all, _metric, DateTime.UtcNow.ToLocalTime().Date, TimeZoneInfo.Local);
         double max = data.Max(d => d.Value);
         _chart.Children.Clear();
-        _chart.Children.Add(Ui.Weak(max > 0 ? $"一番多い日: {Fmt(max)}" : "直近 30 日の記録はありません"));
+        _chart.Children.Add(Ui.Weak(max > 0 ? $"一番多い日: {Fmt(max)}" : "直近 30 日の記録はありません。遊ぶと日ごとの棒が出ます"));
+        _chart.Height = max > 0 ? 150 : 28; // 記録が無いときは、空の枠と日付を出さない
+        if (max <= 0)
+            return;
         var baseLine = new System.Windows.Shapes.Rectangle { Width = step * data.Count, Height = 1 };
         baseLine.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "BorderBrush");
         Canvas.SetTop(baseLine, top + height);
