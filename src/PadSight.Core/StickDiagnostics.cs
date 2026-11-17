@@ -3,20 +3,21 @@
 namespace PadSight.Core;
 
 /// <param name="Noise">平均の位置からの距離の標準偏差(揺れ。PadLab の DeviceSession.Noise と同じ求め方)</param>
-public sealed record DriftResult(float MeanX, float MeanY, float MeanMagnitude, float MaxMagnitude, double RawMeanX, double RawMeanY, float Noise = 0)
+/// <param name="MaxFromMean">平均の位置からの距離の最大(手を離している間の動き。PadLab の DriftAnalyzer の MaxDistance にあたる)</param>
+public sealed record DriftResult(float MeanX, float MeanY, float MeanMagnitude, float MaxMagnitude, double RawMeanX, double RawMeanY, float Noise = 0, float MaxFromMean = 0)
 {
     /// <summary>PadLab の DriftThresholds の既定(軽いずれ・大きなずれ)。</summary>
     public const float MinorDistance = 0.03f, NotableDistance = 0.08f;
 
-    /// <summary>0 = 目安の範囲内、1 = 軽いずれ、2 = 大きなずれ(最大の倒し具合で見る)。</summary>
-    public int Tier => MaxMagnitude >= NotableDistance ? 2 : MaxMagnitude >= MinorDistance ? 1 : 0;
+    /// <summary>0 = 目安の範囲内、1 = 軽いずれ、2 = 大きなずれ。PadLab と同じく、止まった位置(平均)からの動きで見る(止まった位置そのもののずれは、デッドゾーンの円の内側・外側で見る)。</summary>
+    public int Tier => MaxFromMean >= NotableDistance ? 2 : MaxFromMean >= MinorDistance ? 1 : 0;
 
     /// <summary>判定の文(断定しない)。</summary>
     public string Verdict => Tier switch
     {
-        2 => "目安(0.080)より大きなずれがある可能性があります",
-        1 => "軽いずれがある可能性があります(目安 0.030〜0.080)",
-        _ => "ずれは目安(0.030)より小さい範囲です",
+        2 => "手を離している間に、目安(0.080)より大きく動いている可能性があります",
+        1 => "手を離している間に、少し動いている可能性があります(目安 0.030〜0.080)",
+        _ => "手を離している間の動きは、目安(0.030)より小さい範囲です",
     };
 
     /// <summary>平均のずれの向き(0〜360 度。右が 0、反時計回り)。</summary>
@@ -61,7 +62,7 @@ public static class StickDiagnostics
         double dm = dist.Average();
         float noise = (float)Math.Sqrt(Math.Max(0, dist.Average(d => d * d) - dm * dm));
         return new DriftResult(mx, my, MathF.Min(1f, MathF.Sqrt(mx * mx + my * my)), samples.Max(s => s.Magnitude),
-            samples.Average(s => (double)s.RawX), samples.Average(s => (double)s.RawY), noise);
+            samples.Average(s => (double)s.RawX), samples.Average(s => (double)s.RawY), noise, (float)dist.Max());
     }
 
     public static OuterResult Outer(IReadOnlyList<StickValue> samples)

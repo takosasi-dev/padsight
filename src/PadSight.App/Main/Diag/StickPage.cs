@@ -60,9 +60,8 @@ public sealed class StickPage : IDiagPage
     bool _running, _waiting;
     ulong _end, _lastNow;
     ulong? _resStartNow;
-    uint _padId;
+    uint? _padId;
     string _padName = "", _padKind = "";
-    bool _sideAtStart;
     readonly List<StickValue> _values = [];
     SnapbackTest? _snap;
     ResolutionTest? _res;
@@ -174,7 +173,6 @@ public sealed class StickPage : IDiagPage
         _test = _shown = t;
         _running = true;
         _waiting = t == Test.Drift;
-        _sideAtStart = Right;
         _end = _lastNow + t switch { Test.Drift => WaitNs, Test.Outer => OuterNs, _ => LimitNs };
         _values.Clear();
         _shownDrift = null;
@@ -212,9 +210,22 @@ public sealed class StickPage : IDiagPage
 
     void SideChanged()
     {
-        if (_running && Right != _sideAtStart)
-            Cancel();
+        Cancel();
+        ClearShown(); // 出ている結果は前のスティックの物なので消す
         UpdateDeadzone();
+    }
+
+    /// <summary>出している結果と図を消す(パッドやスティックを替えたとき)。</summary>
+    void ClearShown()
+    {
+        ClearResult();
+        _shown = Test.None;
+        _shownDrift = null;
+        _shownBins = null;
+        _values.Clear();
+        _plot.Children.Clear();
+        _outline.Points = [];
+        DrawBase();
     }
 
     // ---- 描画のたび
@@ -236,6 +247,13 @@ public sealed class StickPage : IDiagPage
         }
         if (!_running)
         {
+            if (_padId is not null && _padId != pad.InstanceId)
+            {
+                // 別のパッドに替えた: 前のパッドの結果とおすすめ値は消す
+                Array.Clear(_drift);
+                ClearShown();
+                UpdateDeadzone();
+            }
             _padId = pad.InstanceId;
             _padName = pad.Name;
             _padKind = pad.Kind.ToString();
@@ -352,12 +370,13 @@ public sealed class StickPage : IDiagPage
         AddTile("平均のずれ", F3(d.MeanMagnitude), $"生の値 x={d.RawMeanX.ToString("+0;-0", Inv)}、y={d.RawMeanY.ToString("+0;-0", Inv)}");
         AddTile("最大", F3(d.MaxMagnitude));
         AddTile($"デッドゾーンの円({dz.ToString("0.00", Inv)})より", d.MaxMagnitude <= dz ? "内側" : "外側");
+        AddTile("動きの最大", F3(d.MaxFromMean), "平均の位置から");
         AddTile("揺れ", F3(d.Noise), "平均の位置からの散らばり");
         SetVerdict(d.Verdict, d.Tier == 0 ? "SuccessBrush" : "WarningBrush");
         UpdateDeadzone();
         _record = Rec("stick_drift", "手を離したときのずれ", d.Verdict, [],
             ("平均のずれ", d.MeanMagnitude), ("最大のずれ", d.MaxMagnitude), ("生の値の平均 x", Math.Round(d.RawMeanX, 1)), ("生の値の平均 y", Math.Round(d.RawMeanY, 1)),
-            ("揺れ", d.Noise), ("デッドゾーンの円", dz), ("デッドゾーンのおすすめ値(%)", advice.RecommendedPercent));
+            ("動きの最大", d.MaxFromMean), ("揺れ", d.Noise), ("デッドゾーンの円", dz), ("デッドゾーンのおすすめ値(%)", advice.RecommendedPercent));
         DrawBase();
         DrawDrift();
     }
@@ -410,15 +429,15 @@ public sealed class StickPage : IDiagPage
     {
         var r = _res!.Result;
         Done("分解能");
-        AddTile("最小の刻み", r.MinStep.ToString("0.00000", Inv));
+        AddTile("最小の刻み", r.AxisStep.ToString("0.00000", Inv), "x・y の値の差から");
         AddTile("刻みの目安", r.StepsEstimate > 0 ? $"約 {r.StepsEstimate.ToString("N0", Inv)} 段" : "—", "−1〜1 を最小の刻みで割った数");
         AddTile("出た値の数", r.DistinctLevels.ToString(Inv));
         AddTile("揺れ", r.NoiseLevel.ToString("0.0000", Inv), "続いた値の差のばらつき");
         AddTile("測った時間", r.ElapsedSeconds.ToString("0.0", Inv) + " 秒");
-        bool coarse = r.DistinctLevels < 20 || r.MinStep >= ResolutionResult.CoarseStep;
+        bool coarse = r.Coarse || r.DistinctLevels < 20;
         SetVerdict(r.Verdict, coarse ? "WarningBrush" : "SuccessBrush");
         _record = Rec("resolution", "分解能", r.Verdict, [],
-            ("最小の刻み", r.MinStep), ("刻みの目安(段)", r.StepsEstimate), ("出た値の数", r.DistinctLevels),
+            ("最小の刻み", r.AxisStep), ("|v| の最小の差", r.MinStep), ("刻みの目安(段)", r.StepsEstimate), ("出た値の数", r.DistinctLevels),
             ("揺れ", r.NoiseLevel), ("測った時間(秒)", Math.Round(r.ElapsedSeconds, 2)));
         DrawResolution(_res.Trace);
     }

@@ -157,6 +157,23 @@ public class DiagStickTests
     }
 
     [Fact]
+    public void Resolution_EightBitWithOtherAxisJitter_StillCoarse()
+    {
+        // x を 8 ビットの刻みで動かし、y が 1 段だけ行ったり来たりする。|v| の差は小さく出るが、軸の刻みで見る
+        var t = new ResolutionTest(false);
+        t.Start();
+        const float step = 257f / 32767f;
+        for (int i = 0; i < 60; i++)
+            t.Feed(At(i * 10, 0.3f + (i / 2) * step, i % 2 == 0 ? 0 : step));
+        t.Finish();
+        var r = t.Result;
+        Assert.True(r.MinStep < 0.001f, $"min={r.MinStep}"); // PadLab の |v| の刻みは小さく出る
+        Assert.InRange(r.AxisStep, step - 1e-5f, step + 1e-5f);
+        Assert.InRange(r.StepsEstimate, 250, 260);
+        Assert.Contains("粗め", r.Verdict);
+    }
+
+    [Fact]
     public void Resolution_CoarseWinsOverFewLevels()
     {
         // 8 ビットのパッドをゆっくり小さく動かすと、出る値も 12 個ほどしかない。粗さの方を言う
@@ -284,9 +301,19 @@ public class DiagStickTests
     [InlineData(0.08f, 2)]
     public void Drift_Tier_UsesPadLabThresholds(float max, int tier)
     {
-        var d = StickDiagnostics.Drift([new StickValue(max, 0, 0, 0)]);
+        // 止まった位置 (0.05, 0.02) から ±max 動く。止まった位置そのもののずれは目安に入れない(PadLab の基準点からの距離と同じ)
+        var d = StickDiagnostics.Drift([new StickValue(0.05f - max, 0.02f, 0, 0), new StickValue(0.05f + max, 0.02f, 0, 0)]);
+        Assert.Equal(max, d.MaxFromMean, 5);
         Assert.Equal(tier, d.Tier);
         Assert.Contains(tier == 0 ? "小さい範囲" : "可能性があります", d.Verdict);
+    }
+
+    [Fact]
+    public void Drift_RestOffsetAloneIsNotFlagged()
+    {
+        var d = StickDiagnostics.Drift([.. Enumerable.Repeat(new StickValue(0.06f, 0, 0, 0), 50)]);
+        Assert.Equal(0.06f, d.MaxMagnitude, 5);
+        Assert.Equal(0, d.Tier);
     }
 
     [Fact]
