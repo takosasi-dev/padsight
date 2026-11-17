@@ -18,12 +18,15 @@ public static class MotionDetector
         [("22", [2, 5, 2])], // 下・中立・下。5 を飛ばさずに見る
     ];
 
-    /// <summary>rows は新しい順で、rows[0] がボタンを押した行。成立した物の名前、無ければ null。</summary>
-    public static string? Detect(IReadOnlyList<HistoryRow> rows)
+    /// <summary>rows は新しい順で、rows[0] がボタンを押した行。成立した物の名前、無ければ null。
+    /// usedAt は前にコマンドの印を付けたボタンの行の始まり。それ以前に始まった方向は使わない(1 つのコマンドは 1 回だけ)。</summary>
+    public static string? Detect(IReadOnlyList<HistoryRow> rows, ulong usedAt = 0)
     {
         if (rows.Count == 0)
             return null;
         ulong from = rows[0].StartNs >= WindowNs ? rows[0].StartNs - WindowNs : 0;
+        if (usedAt > 0)
+            from = Math.Max(from, usedAt + 1);
         // 同じ方向が続いた物を 1 つにまとめ(始まりは一番古い行)、古い順に並べる
         var runs = new List<(int Dir, ulong Start)>();
         foreach (var r in rows)

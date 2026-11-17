@@ -195,6 +195,7 @@ public sealed class InputEngine
         {
             _historyPad = id;
             _direction.Reset();
+            _history.SourceChanged();
         }
         int dir;
         List<string> keys;

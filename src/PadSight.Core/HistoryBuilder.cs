@@ -39,8 +39,12 @@ public sealed class HistoryBuilder
             if (_rows.Count > 0 && _rows[0].EndNs is null)
                 _rows[0] = _rows[0] with { EndNs = ns };
             _rows.Insert(0, new HistoryRow(direction, newly, held, ns, null));
-            if (Motions && newly.Count > 0)
-                _rows[0] = _rows[0] with { Motion = MotionDetector.Detect(_rows) };
+            _noMerge = false;
+            if (Motions && newly.Count > 0 && MotionDetector.Detect(_rows, _motionUsedAt) is { } motion)
+            {
+                _rows[0] = _rows[0] with { Motion = motion };
+                _motionUsedAt = ns; // 1 つのコマンドは 1 回だけ。続けて押したボタンの行に同じ印を付けない
+            }
             if (_rows.Count > Capacity)
                 _rows.RemoveAt(_rows.Count - 1);
         }
@@ -53,12 +57,18 @@ public sealed class HistoryBuilder
     // 同じボタンを離して押し直した物は、別の押下として新しい行にする
     bool CanMerge(ulong ns, List<string> newly)
     {
-        if (MergeWindowNs == 0 || newly.Count == 0 || _rows.Count == 0)
+        if (MergeWindowNs == 0 || _noMerge || newly.Count == 0 || _rows.Count == 0)
             return false;
         var top = _rows[0];
         return top.EndNs is null && top.NewlyPressed.Count > 0 && ns >= top.StartNs && ns - top.StartNs <= MergeWindowNs
             && !newly.Any(k => top.NewlyPressed.Contains(k) || top.Held.Contains(k));
     }
+
+    bool _noMerge;
+    ulong _motionUsedAt;
+
+    /// <summary>表示するパッドが替わった。次の押下は、前のパッドの行にまとめない(FR-50)。</summary>
+    public void SourceChanged() => _noMerge = true;
 
     /// <summary>出ている行とメモリの行を消す(FR-21)。今の方向と押している物は覚えたまま。</summary>
     public void Clear() => _rows.Clear();

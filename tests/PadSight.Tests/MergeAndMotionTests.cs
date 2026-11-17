@@ -426,4 +426,48 @@ public class MergeAndMotionTests
         Assert.Empty(reset);
         Assert.Equal((5, false), (applied.History.MergeFrames, applied.History.Motions));
     }
+
+    // ---- 合流の後に足した直し ----
+
+    [Fact]
+    public void Motion_IsUsedOnce_SecondButtonGetsNoBadge()
+    {
+        var (e, _) = Start();
+        e.Down(T.S, PadButton.DpadDown);
+        e.Down(T.S + 2 * F, PadButton.DpadRight);
+        e.Up(T.S + 4 * F, PadButton.DpadDown);
+        e.Tap(T.S + 6 * F, PadButton.South);  // 236 + A
+        e.Tap(T.S + 12 * F, PadButton.East);  // → を押したまま、窓の中で B
+        var h = e.Snapshot(2 * T.S, 0).History;
+        Assert.Equal("236", h[1].Motion);
+        Assert.Null(h[0].Motion);
+    }
+
+    [Fact]
+    public void Motion_NewMotionAfterUsedOne_IsDetectedAgain()
+    {
+        var (e, _) = Start();
+        e.Down(T.S, PadButton.DpadDown);
+        e.Down(T.S + 2 * F, PadButton.DpadRight);
+        e.Up(T.S + 4 * F, PadButton.DpadDown);
+        e.Tap(T.S + 6 * F, PadButton.South);   // 236 + A
+        e.Up(T.S + 8 * F, PadButton.DpadRight);
+        e.Down(T.S + 10 * F, PadButton.DpadDown);
+        e.Down(T.S + 12 * F, PadButton.DpadLeft);
+        e.Up(T.S + 14 * F, PadButton.DpadDown);
+        e.Tap(T.S + 16 * F, PadButton.East);   // 続けて 214 + B
+        var h = e.Snapshot(2 * T.S, 0).History;
+        Assert.Equal("214", h[0].Motion);
+    }
+
+    [Fact]
+    public void PressRightAfterSwitchingPads_IsNotMergedIntoOtherPadsRow()
+    {
+        var b = Builder(mergeFrames: 5);
+        b.Update(T.S, 5, ["South"]);
+        b.SourceChanged(); // 表示するパッドが替わった
+        b.Update(T.S + F, 5, ["South", "East"]);
+        Assert.Equal(2, b.Rows.Count);
+        Assert.Null(b.Rows[0].MergeGapNs);
+    }
 }
