@@ -86,8 +86,12 @@ public sealed class DiagnosticsTab : UserControl
             }
         };
 
+        // 名前と選択欄の間、2 つの組の間を空ける(くっついて読みにくかった)
+        static TextBlock Label(string text, double left) { var t = Ui.Text(text); t.Margin = new Thickness(left, 0, 8, 0); t.VerticalAlignment = VerticalAlignment.Center; return t; }
+        _pad.Margin = _profile.Margin = new Thickness(0, 2, 0, 2);
+        _info.Margin = new Thickness(0, 8, 0, 0);
         var header = Ui.Card(null,
-            Ui.Horizontal(Ui.Text("パッド"), _pad, Ui.Text("機種"), _profile),
+            Ui.Horizontal(Label("パッド", 0), _pad, Label("機種", 24), _profile),
             _info);
         var body = new DockPanel { Margin = new Thickness(0, 12, 0, 0) };
         DockPanel.SetDock(_nav, Dock.Left);
