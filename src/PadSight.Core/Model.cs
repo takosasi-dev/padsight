@@ -51,7 +51,13 @@ public sealed record HistoryRow(
     int Direction,
     IReadOnlyList<string> NewlyPressed,
     IReadOnlyList<string> Held,
-    ulong StartNs, ulong? EndNs);
+    ulong StartNs, ulong? EndNs)
+{
+    /// <summary>同時押しをまとめた行の、最初と最後の押下の差(FR-50)。まとめていなければ null(差 0 でまとめた行は 0)</summary>
+    public ulong? MergeGapNs { get; init; }
+    /// <summary>この行のボタンで成立したコマンド(FR-51。"236" など)。無ければ null。メモリだけに持つ(INV-8)</summary>
+    public string? Motion { get; init; }
+}
 
 /// <summary>統計のパネルに出す値。</summary>
 public sealed record SessionView(

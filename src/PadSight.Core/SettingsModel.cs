@@ -28,6 +28,10 @@ public sealed class HistorySettings
     public string DirectionStyle { get; set; } = "arrow";
     /// <summary>null は "default"。</summary>
     public List<string>? Buttons { get; set; }
+    /// <summary>同時押しをまとめる窓(0〜5。60 分の 1 秒が単位。0 はまとめない。FR-50)。</summary>
+    public int MergeFrames { get; set; } = 2;
+    /// <summary>コマンドを見分けて印を出す(FR-51)。</summary>
+    public bool Motions { get; set; } = true;
 }
 
 public sealed class Settings
@@ -154,6 +158,8 @@ public sealed class Settings
         h.DirectionSource = r.Choice("history.direction_source", ["both", "dpad", "stick"], h.DirectionSource);
         h.StickThreshold = r.Double("history.stick_threshold", 0.20, 0.90, 0.50);
         h.DirectionStyle = r.Choice("history.direction_style", ["arrow", "number"], h.DirectionStyle);
+        h.MergeFrames = r.Int("history.merge_frames", 0, 5, 2);
+        h.Motions = r.Bool("history.motions", true);
         var hb = r.Get("history.buttons");
         if (hb is JsonArray arr)
         {
@@ -242,6 +248,8 @@ public sealed class Settings
                 ["stick_threshold"] = History.StickThreshold,
                 ["direction_style"] = History.DirectionStyle,
                 ["buttons"] = History.Buttons is null ? JsonValue.Create("default") : new JsonArray([.. History.Buttons.Select(b => (JsonNode)b)]),
+                ["merge_frames"] = History.MergeFrames,
+                ["motions"] = History.Motions,
             },
             ["stick"] = new JsonObject { ["trail_ms"] = TrailMs, ["deadzone"] = Deadzone, ["show_raw"] = ShowRaw },
             ["trigger_threshold"] = TriggerThreshold,
