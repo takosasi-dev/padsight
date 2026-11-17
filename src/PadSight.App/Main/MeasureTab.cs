@@ -73,12 +73,8 @@ public sealed class MeasureTab : UserControl
         react.Children.Add(_reactResult);
         react.Children.Add(Ui.Weak("画面に出るまでの遅れ(数十ミリ秒)を含みます"));
 
-        var stack = new StackPanel { MaxWidth = 720, HorizontalAlignment = HorizontalAlignment.Stretch };
-        stack.Children.Add(Ui.Section("連打テスト"));
-        stack.Children.Add(Card(rapid));
-        stack.Children.Add(Ui.Section("反応速度テスト"));
-        stack.Children.Add(Card(react));
-        Content = Ui.Scroll(stack);
+        // ほかのタブと同じく左にそろえた箱に入れる(見出しは箱の中)
+        Content = Ui.Page(Ui.Card("連打テスト", rapid), Ui.Card("反応速度テスト", react));
         ResetDisplays();
     }
 
@@ -92,14 +88,6 @@ public sealed class MeasureTab : UserControl
         t.TextAlignment = TextAlignment.Center;
         Typography.SetNumeralAlignment(t, FontNumeralAlignment.Tabular);
         return t;
-    }
-
-    static Border Card(UIElement child)
-    {
-        var b = new Border { Child = child, CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), Padding = new Thickness(16, 12, 16, 12) };
-        b.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
-        b.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
-        return b;
     }
 
     public bool Running => _mode != Mode.Idle;
@@ -172,7 +160,7 @@ public sealed class MeasureTab : UserControl
             _square.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
             _square.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
             _square.BorderThickness = new Thickness(2);
-            _squareText.SetResourceReference(TextBlock.ForegroundProperty, text.StartsWith("早すぎ", StringComparison.Ordinal) ? "WarningBrush" : "SubTextBrush");
+            _squareText.SetResourceReference(TextBlock.ForegroundProperty, text.StartsWith("早すぎ", StringComparison.Ordinal) ? "WarningTextBrush" : "SubTextBrush"); // 明るいテーマでも地との差が 4.5:1 になる警告の文字色
         }
     }
 

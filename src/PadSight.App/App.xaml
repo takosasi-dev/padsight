@@ -4,7 +4,8 @@
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
         <!-- 寸法は StaticResource、色は Theme.cs が DynamicResource 用のブラシを入れる。
-             2026-11-17: ボタン・選択欄・タブ・入力欄・一覧の行を、Windows の明るい既定の形からテーマの色の形に作り直した(画面設計書 §6) -->
+             2026-11-17: ボタン・選択欄・タブ・入力欄・一覧の行を、Windows の明るい既定の形からテーマの色の形に作り直した(画面設計書 §6)。
+             同日: チェック・選択の丸・スライダー・スクロールバー・表の見出し・入力欄の縁もテーマの形にし、区切りの箱(Card)を足した -->
         <Style TargetType="TextBlock" x:Key="Weak">
             <Setter Property="Foreground" Value="{DynamicResource SubTextBrush}" />
             <Setter Property="TextWrapping" Value="Wrap" />
@@ -14,6 +15,27 @@
             <Setter Property="FontSize" Value="16" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Margin" Value="0,20,0,8" />
+        </Style>
+        <!-- 区切りの中の小見出し(区切りの見出しより一段小さい) -->
+        <Style TargetType="TextBlock" x:Key="SubSection">
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,14,0,6" />
+        </Style>
+        <!-- 区切りの箱(地より一段明るい面に、細い縁と丸み 8)。2026-11-17 にタブの中を箱で区切る形にそろえた -->
+        <Style TargetType="Border" x:Key="Card">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="18,14,18,16" />
+            <Setter Property="Margin" Value="0,0,0,16" />
+        </Style>
+        <Style TargetType="ToolTip">
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="Padding" Value="8,4" />
         </Style>
 
         <!-- キーボードで動かしたときだけ出る枠(強調色の 2px) -->
@@ -27,13 +49,168 @@
             </Setter>
         </Style>
 
+        <!-- チェックと選択の丸。入っているときは塗りに加えて印(チェックの線・中の点)を出す(色だけにしない。§6) -->
         <Style TargetType="CheckBox">
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
             <Setter Property="FocusVisualStyle" Value="{StaticResource Focus}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Background="Transparent">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                            <Border x:Name="Box" Width="18" Height="18" CornerRadius="4" BorderThickness="1.5" VerticalAlignment="Center"
+                                    Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource SubTextBrush}">
+                                <Path x:Name="Mark" Data="M3.5,8.5 L6.5,11.5 L12,5" Stroke="White" StrokeThickness="2" Visibility="Collapsed"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                            </Border>
+                            <ContentPresenter Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource AccentBrush}" /></Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Box" Property="Background" Value="{DynamicResource PrimaryBrush}" />
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
+                                <Setter TargetName="Mark" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style TargetType="RadioButton">
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
             <Setter Property="FocusVisualStyle" Value="{StaticResource Focus}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid Background="Transparent">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                            <Ellipse x:Name="Ring" Width="18" Height="18" StrokeThickness="1.5" VerticalAlignment="Center"
+                                     Fill="{DynamicResource SurfaceBrush}" Stroke="{DynamicResource SubTextBrush}" />
+                            <Ellipse x:Name="Dot" Width="8" Height="8" Fill="{DynamicResource PrimaryBrush}" Visibility="Collapsed" VerticalAlignment="Center" />
+                            <ContentPresenter Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Ring" Property="Stroke" Value="{DynamicResource AccentBrush}" /></Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Ring" Property="Stroke" Value="{DynamicResource PrimaryBrush}" />
+                                <Setter TargetName="Ring" Property="StrokeThickness" Value="2" />
+                                <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- スクロールバー。細い角丸のつまみだけを出し、矢印は出さない(Windows の明るい既定の形が暗いテーマで浮くため) -->
+        <Style x:Key="ScrollThumb" TargetType="Thumb">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border x:Name="Bd" CornerRadius="4" Background="{DynamicResource SubTextBrush}" Opacity="0.45" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Opacity" Value="0.7" /></Trigger>
+                            <Trigger Property="IsDragging" Value="True"><Setter TargetName="Bd" Property="Opacity" Value="0.85" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ScrollPage" TargetType="RepeatButton">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="IsTabStop" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton"><Border Background="Transparent" /></ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="12" />
+            <Setter Property="MinWidth" Value="12" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Border Background="{TemplateBinding Background}" Padding="2">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.DecreaseRepeatButton><RepeatButton Style="{StaticResource ScrollPage}" Command="ScrollBar.PageUpCommand" /></Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton><RepeatButton Style="{StaticResource ScrollPage}" Command="ScrollBar.PageDownCommand" /></Track.IncreaseRepeatButton>
+                                <Track.Thumb><Thumb Style="{StaticResource ScrollThumb}" MinHeight="24" /></Track.Thumb>
+                            </Track>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="Width" Value="Auto" />
+                    <Setter Property="MinWidth" Value="0" />
+                    <Setter Property="Height" Value="12" />
+                    <Setter Property="MinHeight" Value="12" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ScrollBar">
+                                <Border Background="{TemplateBinding Background}" Padding="2">
+                                    <Track x:Name="PART_Track">
+                                        <Track.DecreaseRepeatButton><RepeatButton Style="{StaticResource ScrollPage}" Command="ScrollBar.PageLeftCommand" /></Track.DecreaseRepeatButton>
+                                        <Track.IncreaseRepeatButton><RepeatButton Style="{StaticResource ScrollPage}" Command="ScrollBar.PageRightCommand" /></Track.IncreaseRepeatButton>
+                                        <Track.Thumb><Thumb Style="{StaticResource ScrollThumb}" MinWidth="24" /></Track.Thumb>
+                                    </Track>
+                                </Border>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- スライダー(横だけ)。済んだ側を強調色、残りを縁の色の細い線にし、つまみは丸。キーボードの ←→ もそのまま効く -->
+        <Style x:Key="SliderFill" TargetType="RepeatButton">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="IsTabStop" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton">
+                        <Grid Background="Transparent"><Border Height="4" CornerRadius="2" Background="{TemplateBinding Background}" /></Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="Slider">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource Focus}" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Track x:Name="PART_Track" VerticalAlignment="Center">
+                            <Track.DecreaseRepeatButton><RepeatButton Style="{StaticResource SliderFill}" Background="{DynamicResource AccentBrush}" Command="Slider.DecreaseLarge" /></Track.DecreaseRepeatButton>
+                            <Track.IncreaseRepeatButton><RepeatButton Style="{StaticResource SliderFill}" Background="{DynamicResource BorderBrush}" Command="Slider.IncreaseLarge" /></Track.IncreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb Width="16" Height="16">
+                                    <Thumb.Template>
+                                        <ControlTemplate TargetType="Thumb">
+                                            <Ellipse x:Name="Knob" Fill="{DynamicResource SurfaceBrush}" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" />
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Knob" Property="StrokeThickness" Value="3" /></Trigger>
+                                                <Trigger Property="IsDragging" Value="True"><Setter TargetName="Knob" Property="Fill" Value="{DynamicResource AccentBrush}" /></Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                        </Track>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- ボタン。指を置くと薄く明るくし、押すと縁を強調色にする。使えないときは薄くする -->
@@ -84,9 +261,24 @@
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
             <Setter Property="CaretBrush" Value="{DynamicResource TextBrush}" />
             <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}" />
-            <Setter Property="Padding" Value="4,3" />
-            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="MinHeight" Value="32" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <!-- 角の丸みはボタン・選択欄と同じ 6。入力中は縁を強調色にする -->
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="6" SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" Focusable="False" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource SubTextBrush}" /></Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" /></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- 選択欄 -->
@@ -155,20 +347,31 @@
         </Style>
 
         <!-- タブ。選んでいるタブは、下線・太字・明るい文字の 3 つで示す(色だけにしない) -->
+        <!-- タブの並びは一段明るい帯に置き、中身は地の色にする(中の区切りの箱が地から浮いて見えるように) -->
         <Style TargetType="TabControl">
-            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
-            <Setter Property="BorderThickness" Value="0,1,0,0" />
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="Padding" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <DockPanel KeyboardNavigation.TabNavigation="Local">
+                            <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
+                                <TabPanel IsItemsHost="True" Margin="6,0,0,-1" KeyboardNavigation.TabIndex="1" />
+                            </Border>
+                            <ContentPresenter ContentSource="SelectedContent" Margin="{TemplateBinding Padding}" KeyboardNavigation.TabNavigation="Local" />
+                        </DockPanel>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style TargetType="TabItem">
             <Setter Property="FocusVisualStyle" Value="{StaticResource Focus}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
-                        <Border x:Name="Bd" Padding="16,9" Background="Transparent" BorderThickness="0,0,0,2" BorderBrush="Transparent"
+                        <Border x:Name="Bd" Padding="14,0" Height="42" Background="Transparent" BorderThickness="0,0,0,2" BorderBrush="Transparent"
                                 TextElement.Foreground="{DynamicResource SubTextBrush}">
-                            <ContentPresenter ContentSource="Header" />
+                            <ContentPresenter ContentSource="Header" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <!-- 文字の色と太さは見出しの部分だけに付ける(TabItem に付けると、タブの中身の文まで太字になる) -->
@@ -189,10 +392,23 @@
         </Style>
 
         <!-- 一覧 -->
+        <!-- 表。縁は丸み 8、見出しは小さく弱い文字で、区切りの縦線は出さない -->
         <Style TargetType="ListView">
             <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListView">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="4,0,4,4" SnapsToDevicePixels="True">
+                            <ScrollViewer Style="{DynamicResource {x:Static GridView.GridViewScrollViewerStyleKey}}" Focusable="False">
+                                <ItemsPresenter />
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style TargetType="ListBox">
             <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
@@ -228,10 +444,11 @@
         <Style TargetType="ListViewItem">
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
             <Setter Property="FocusVisualStyle" Value="{StaticResource Focus}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListViewItem">
-                        <Border x:Name="Bd" Background="Transparent" Padding="0,5">
+                        <Border x:Name="Bd" Background="Transparent" Padding="0,6" CornerRadius="4">
                             <GridViewRowPresenter Columns="{TemplateBinding GridView.ColumnCollection}" Content="{TemplateBinding Content}" />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -247,7 +464,17 @@
             <Setter Property="Foreground" Value="{DynamicResource SubTextBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
-            <Setter Property="Padding" Value="6,6" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Padding" Value="6,10,6,7" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridViewColumnHeader">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="0,0,0,1" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" RecognizesAccessKey="True" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Application.Resources>
 </Application>

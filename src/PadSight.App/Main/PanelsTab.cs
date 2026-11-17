@@ -12,9 +12,23 @@ namespace PadSight.App.Main;
 
 public sealed class PanelsTab : UserControl
 {
-    readonly ListBox _list = new() { Width = 130, Margin = new Thickness(16, 16, 0, 16) };
+    /// <summary>真ん中の列は狭いので、ラベルの列もほかのタブより狭くする。</summary>
+    const double Label = 170;
+
+    static Grid Row(string label, UIElement control) => Ui.Row(label, control, Label);
+
+    static ComboBox Narrow(ComboBox c)
+    {
+        c.MinWidth = 120;
+        return c;
+    }
+
+    static Grid Slider(string label, double min, double max, double step, double value, string format, Action<double> onChange) =>
+        Ui.Slider(label, min, max, step, value, format, onChange, Label, 170);
+    // 左の 4 枚の一覧は地の上に置く(箱にしない)。選んだ行は塗りと左の線(App.xaml)
+    readonly ListBox _list = new() { Width = 140, Margin = new Thickness(14, 20, 0, 16), BorderThickness = new Thickness(0), Background = Brushes.Transparent, Padding = new Thickness(0) };
     readonly ContentControl _settingsHost = new();
-    readonly Viewbox _previewBox = new() { MaxWidth = 260, MaxHeight = 260, VerticalAlignment = VerticalAlignment.Top };
+    readonly Viewbox _previewBox = new() { MaxWidth = 214, MaxHeight = 260, VerticalAlignment = VerticalAlignment.Top };
     readonly Dictionary<string, PanelView> _previews = new()
     {
         ["pad"] = new PadView(), ["history"] = new HistoryView(), ["stick"] = new StickView(), ["stats"] = new StatsView(),
@@ -32,12 +46,20 @@ public sealed class PanelsTab : UserControl
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition());
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(280) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.45, GridUnitType.Star), MinWidth = 180, MaxWidth = 250 }); // 狭い窓では見本を縮め、真ん中の設定に幅を回す
         grid.Children.Add(_list);
         var scroll = Ui.Scroll(_settingsHost);
+        scroll.Padding = new Thickness(14, 20, 14, 4);
         Grid.SetColumn(scroll, 1);
         grid.Children.Add(scroll);
-        var preview = new Border { Child = _previewBox, Background = Draw.Background, CornerRadius = new CornerRadius(8), Margin = new Thickness(0, 16, 16, 16), Padding = new Thickness(8), VerticalAlignment = VerticalAlignment.Top };
+        // 右の見本。何の絵かを上に弱い文字で書く
+        var preview = new StackPanel { Margin = new Thickness(0, 20, 20, 16) };
+        var caption = Ui.Weak("見本");
+        caption.Margin = new Thickness(2, 0, 0, 6);
+        preview.Children.Add(caption);
+        var pic = Ui.Picture(_previewBox);
+        pic.HorizontalAlignment = HorizontalAlignment.Stretch;
+        preview.Children.Add(pic);
         Grid.SetColumn(preview, 2);
         grid.Children.Add(preview);
         Content = grid;
@@ -57,10 +79,12 @@ public sealed class PanelsTab : UserControl
         var s = App.Current.Settings;
         string name = Selected;
         var p = s.Panels[name];
-        var stack = new StackPanel();
+        // 箱 1: プロファイルと 4 枚に共通の配色。箱 2: このパネルの出し方。箱 3: このパネルだけの設定
+        var common = new StackPanel();
+        var stack = common;
         stack.Children.Add(ProfileRows());
         // FR-39: 4 枚に共通の配色テーマ。選ぶと押したときの色もおすすめの色にする
-        stack.Children.Add(Ui.Row("パネルの配色(4 枚共通)", Ui.Combo(PanelTheme.Choices, s.PanelTheme, v =>
+        stack.Children.Add(Row("パネルの配色(4 枚共通)", Ui.Combo(PanelTheme.Choices, s.PanelTheme, v =>
         {
             s.PanelTheme = v;
             if (PanelTheme.RecommendedPressed(v) is { } pressed)
@@ -80,13 +104,16 @@ public sealed class PanelsTab : UserControl
             Changed();
             Build();
         })));
+        var look = new StackPanel();
+        stack = look;
         stack.Children.Add(Ui.Check("表示する", p.Visible, v => { p.Visible = v; Changed(); }));
-        stack.Children.Add(Ui.Slider("大きさ(%)", 50, 300, 10, p.Scale, "0", v => { p.Scale = (int)v; Changed(); }));
-        stack.Children.Add(Ui.Slider("不透明度(%)", 20, 100, 1, p.Opacity, "0", v => { p.Opacity = (int)v; Changed(); }));
-        stack.Children.Add(Ui.Slider("背景の濃さ(%)", 0, 100, 1, p.BackgroundOpacity, "0", v => { p.BackgroundOpacity = (int)v; Changed(); }));
+        stack.Children.Add(Slider("大きさ(%)", 50, 300, 10, p.Scale, "0", v => { p.Scale = (int)v; Changed(); }));
+        stack.Children.Add(Slider("不透明度(%)", 20, 100, 1, p.Opacity, "0", v => { p.Opacity = (int)v; Changed(); }));
+        stack.Children.Add(Slider("背景の濃さ(%)", 0, 100, 1, p.BackgroundOpacity, "0", v => { p.BackgroundOpacity = (int)v; Changed(); }));
         stack.Children.Add(Ui.Horizontal(Ui.Button("既定の位置に戻す", () => App.Current.Panels.ResetPosition(name))));
         stack.Children.Add(PositionRow(name));
-        stack.Children.Add(Ui.Section("このパネルの設定"));
+        var own = new StackPanel();
+        stack = own;
         switch (name)
         {
             case "pad": BuildPad(stack, s); break;
@@ -94,7 +121,12 @@ public sealed class PanelsTab : UserControl
             case "stick": BuildStick(stack, s); break;
             case "stats": BuildStats(stack, s); break;
         }
-        _settingsHost.Content = stack;
+        string title = App.Current.Panels.Entries.FirstOrDefault(e => e.Name == name)?.Title ?? "";
+        var page = new StackPanel();
+        page.Children.Add(Ui.Card(null, common));
+        page.Children.Add(Ui.Card(title, look));
+        page.Children.Add(Ui.Card("このパネルの設定", own));
+        _settingsHost.Content = page;
         _previewBox.Child = _previews[name];
         _dirty = true;
     }
@@ -109,13 +141,13 @@ public sealed class PanelsTab : UserControl
         var stack = new StackPanel();
         var names = s.Profiles.Keys.OrderBy(n => n, StringComparer.CurrentCulture).ToList();
         if (names.Count == 0)
-            stack.Children.Add(Ui.Row("プロファイル", Ui.Weak("まだありません")));
+            stack.Children.Add(Row("プロファイル", Ui.Weak("まだありません")));
         else
         {
             if (_profileChoice is null || !names.Contains(_profileChoice))
                 _profileChoice = names[0];
-            stack.Children.Add(Ui.Row("プロファイル", Ui.Horizontal(
-                Ui.Combo([.. names.Select(n => (n, n))], _profileChoice, v => _profileChoice = v),
+            stack.Children.Add(Row("プロファイル", Ui.Horizontal(
+                Narrow(Ui.Combo([.. names.Select(n => (n, n))], _profileChoice, v => _profileChoice = v)),
                 Ui.Button("当てる", () =>
                 {
                     string name = _profileChoice!;
@@ -156,9 +188,9 @@ public sealed class PanelsTab : UserControl
         });
         save.IsEnabled = false;
         nameBox.TextChanged += (_, _) => save.IsEnabled = Settings.IsProfileName(nameBox.Text);
-        stack.Children.Add(Ui.Row("今の設定に名前を付ける", Ui.Horizontal(nameBox, save)));
+        stack.Children.Add(Row("今の設定に名前を付ける", Ui.Horizontal(nameBox, save)));
         if (_profileNote.Length > 0)
-            stack.Children.Add(Ui.Row("", Ui.Weak(_profileNote)));
+            stack.Children.Add(Row("", Ui.Weak(_profileNote)));
         return stack;
     }
 
@@ -177,7 +209,7 @@ public sealed class PanelsTab : UserControl
             swatch.Background = (Brush)new BrushConverter().ConvertFromString(box.Text)!;
             Changed();
         };
-        return Ui.Row(label, Ui.Horizontal(box, swatch));
+        return Row(label, Ui.Horizontal(box, swatch));
     }
 
     /// <summary>位置を数で入れる欄。今いるモニターの作業領域の左上からの DIP。Enter か欄を離れたときに動かす。</summary>
@@ -204,7 +236,7 @@ public sealed class PanelsTab : UserControl
             box.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) Apply(); };
             box.LostFocus += (_, _) => Apply();
         }
-        return Ui.Row("位置 X・Y", Ui.Horizontal(x, y, note));
+        return Row("位置 X・Y", Ui.Horizontal(x, y, note));
     }
 
     void BuildPad(StackPanel stack, Settings s)
@@ -226,11 +258,11 @@ public sealed class PanelsTab : UserControl
             }
         };
         swatches.Children.Add(hex);
-        stack.Children.Add(Ui.Row("押したときの色", swatches));
-        stack.Children.Add(Ui.Row("ボタンの表記", Ui.Combo([("pad", "パッドに合わせる"), ("xbox", "Xbox 表記"), ("playstation", "PlayStation 表記")], s.LabelStyle,
+        stack.Children.Add(Row("押したときの色", swatches));
+        stack.Children.Add(Row("ボタンの表記", Ui.Combo([("pad", "パッドに合わせる"), ("xbox", "Xbox 表記"), ("playstation", "PlayStation 表記")], s.LabelStyle,
             v => { s.LabelStyle = v; Changed(); })));
-        stack.Children.Add(Ui.Slider("トリガーを押したとみなす値", 0.10, 0.90, 0.05, s.TriggerThreshold, "0.00", v => { s.TriggerThreshold = v; Changed(); }));
-        stack.Children.Add(Ui.Section("パッドの型ごとのスキン"));
+        stack.Children.Add(Slider("トリガーを押したとみなす値", 0.10, 0.90, 0.05, s.TriggerThreshold, "0.00", v => { s.TriggerThreshold = v; Changed(); }));
+        stack.Children.Add(Ui.SubSection("パッドの型ごとのスキン"));
         var pads = App.Current.Bus.Latest.Pads.Where(p => p.IsMapped).GroupBy(p => p.Guid).Select(g => (g.Key, g.First().Name)).ToList();
         foreach (var guid in s.Devices.Keys.Where(k => pads.All(p => p.Key != k)))
             pads.Add((guid, "(今つながっていない型) " + guid[..Math.Min(8, guid.Length)]));
@@ -238,29 +270,29 @@ public sealed class PanelsTab : UserControl
             stack.Children.Add(Ui.Weak("パッドをつなぐと、ここで型ごとにスキンを選べます"));
         foreach (var (guid, padName) in pads)
         {
-            stack.Children.Add(Ui.Row(padName, Ui.Combo(
+            stack.Children.Add(Row(padName, Ui.Combo(
                 [("auto", "自動"), ("xbox", "Xbox 型"), ("playstation", "PlayStation 型"), ("switch_pro", "Switch Pro 型"), ("joycon_pair", "Joy-Con ペア型"), ("arcade", "アケコン型"), ("generic", "汎用型")],
                 s.Devices.GetValueOrDefault(guid) ?? "auto",
-                v => { if (v == "auto") s.Devices.Remove(guid); else s.Devices[guid] = v; Changed(); }), 260));
+                v => { if (v == "auto") s.Devices.Remove(guid); else s.Devices[guid] = v; Changed(); })));
         }
     }
 
     void BuildHistory(StackPanel stack, Settings s)
     {
         var h = s.History;
-        stack.Children.Add(Ui.Slider("行数", 5, 40, 1, h.Rows, "0", v => { h.Rows = (int)v; Changed(); }));
-        stack.Children.Add(Ui.Row("フレームの基準", Ui.Combo([("60", "60"), ("120", "120"), ("144", "144"), ("240", "240"), ("0", "ミリ秒")],
+        stack.Children.Add(Slider("行数", 5, 40, 1, h.Rows, "0", v => { h.Rows = (int)v; Changed(); }));
+        stack.Children.Add(Row("フレームの基準", Ui.Combo([("60", "60"), ("120", "120"), ("144", "144"), ("240", "240"), ("0", "ミリ秒")],
             h.FrameBase.ToString(CultureInfo.InvariantCulture), v => { h.FrameBase = int.Parse(v, CultureInfo.InvariantCulture); Changed(); })));
-        stack.Children.Add(Ui.Row("方向の元", Ui.Combo([("both", "十字キーと左スティック"), ("dpad", "十字キーだけ"), ("stick", "左スティックだけ")],
+        stack.Children.Add(Row("方向の元", Ui.Combo([("both", "十字キーと左スティック"), ("dpad", "十字キーだけ"), ("stick", "左スティックだけ")],
             h.DirectionSource, v => { h.DirectionSource = v; Changed(); })));
-        stack.Children.Add(Ui.Slider("方向とみなす倒し具合", 0.20, 0.90, 0.05, h.StickThreshold, "0.00", v => { h.StickThreshold = v; Changed(); }));
-        stack.Children.Add(Ui.Row("方向の出し方", Ui.Combo([("arrow", "矢印"), ("number", "数字")], h.DirectionStyle, v => { h.DirectionStyle = v; Changed(); })));
+        stack.Children.Add(Slider("方向とみなす倒し具合", 0.20, 0.90, 0.05, h.StickThreshold, "0.00", v => { h.StickThreshold = v; Changed(); }));
+        stack.Children.Add(Row("方向の出し方", Ui.Combo([("arrow", "矢印"), ("number", "数字")], h.DirectionStyle, v => { h.DirectionStyle = v; Changed(); })));
         // FR-50・FR-51。0 は「まとめない」、ほかは最初の押下からの窓
-        stack.Children.Add(Ui.Row("同時押しをまとめる", Ui.Combo(
+        stack.Children.Add(Row("同時押しをまとめる", Ui.Combo(
             [("0", "まとめない"), .. Enumerable.Range(1, 5).Select(i => (i.ToString(CultureInfo.InvariantCulture), $"{i}/60 秒以内"))],
             h.MergeFrames.ToString(CultureInfo.InvariantCulture), v => { h.MergeFrames = int.Parse(v, CultureInfo.InvariantCulture); Changed(); })));
         stack.Children.Add(Ui.Check("コマンドを見分ける", h.Motions, v => { h.Motions = v; Changed(); }));
-        stack.Children.Add(Ui.Section("出すボタン"));
+        stack.Children.Add(Ui.SubSection("出すボタン"));
         var wrap = new WrapPanel();
         foreach (var key in Settings.AllHistoryButtonKeys.Where(k => !k.StartsWith("Dpad", StringComparison.Ordinal)))
         {
@@ -280,8 +312,8 @@ public sealed class PanelsTab : UserControl
 
     void BuildStick(StackPanel stack, Settings s)
     {
-        stack.Children.Add(Ui.Slider("軌跡の長さ(ミリ秒)", 0, 2000, 50, s.TrailMs, "0", v => { s.TrailMs = (int)v; Changed(); }));
-        stack.Children.Add(Ui.Slider("デッドゾーンの円", 0, 0.5, 0.01, s.Deadzone, "0.00", v => { s.Deadzone = v; Changed(); }));
+        stack.Children.Add(Slider("軌跡の長さ(ミリ秒)", 0, 2000, 50, s.TrailMs, "0", v => { s.TrailMs = (int)v; Changed(); }));
+        stack.Children.Add(Slider("デッドゾーンの円", 0, 0.5, 0.01, s.Deadzone, "0.00", v => { s.Deadzone = v; Changed(); }));
         stack.Children.Add(Ui.Check("生の値を出す", s.ShowRaw, v => { s.ShowRaw = v; Changed(); }));
         stack.Children.Add(Ui.Weak("デッドゾーンの円は表示だけで、値は変えません"));
     }

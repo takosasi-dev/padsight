@@ -21,9 +21,11 @@ public sealed class ExportWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.NoResize;
         SetResourceReference(BackgroundProperty, "BackgroundBrush");
-        var stack = new StackPanel { Margin = new Thickness(16) };
-        _game = new TextBox { Text = lastGame ?? "", MaxLength = 30, Margin = new Thickness(0, 2, 0, 8) };
-        _type = new TextBox { Text = lastType, MaxLength = 20, Margin = new Thickness(0, 2, 0, 8) };
+        var stack = new StackPanel { Margin = new Thickness(24, 20, 24, 20) };
+        _game = new TextBox { Text = lastGame ?? "", MaxLength = 30, Margin = new Thickness(0, 4, 0, 12) };
+        _type = new TextBox { Text = lastType, MaxLength = 20, Margin = new Thickness(0, 4, 0, 12) };
+        System.Windows.Automation.AutomationProperties.SetName(_game, "ゲーム");
+        System.Windows.Automation.AutomationProperties.SetName(_type, "種別");
         stack.Children.Add(Label("ゲーム"));
         stack.Children.Add(_game);
         stack.Children.Add(Label("種別"));
@@ -31,16 +33,17 @@ public sealed class ExportWindow : Window
         stack.Children.Add(Label(excluded > 0
             ? $"書き出すセッション {count} 件(1 分に満たない {excluded} 件は除きます)"
             : $"書き出すセッション {count} 件"));
-        _error = new TextBlock { Margin = new Thickness(0, 6, 0, 0) };
+        _error = new TextBlock { Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
         _error.SetResourceReference(TextBlock.ForegroundProperty, "ErrorBrush");
         stack.Children.Add(_error);
         var note = new TextBlock { Text = "GrindLog では、出所は『手入力』、タグは『PadSight』として入ります", Margin = new Thickness(0, 8, 0, 12) };
         note.SetResourceReference(StyleProperty, "Weak");
         stack.Children.Add(note);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        var ok = new Button { Content = "書き出す", IsDefault = true };
+        var ok = new Button { Content = "書き出す", IsDefault = true, MinWidth = 96 };
+        ok.SetResourceReference(StyleProperty, "Primary"); // この窓の主な操作
         ok.Click += (_, _) => Submit();
-        var cancel = new Button { Content = "取り消し", IsCancel = true };
+        var cancel = new Button { Content = "取り消し", IsCancel = true, MinWidth = 96, Margin = new Thickness(0) };
         buttons.Children.Add(ok);
         buttons.Children.Add(cancel);
         stack.Children.Add(buttons);
