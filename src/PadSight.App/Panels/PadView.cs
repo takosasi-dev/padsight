@@ -230,6 +230,45 @@ public sealed class PadView : PanelView
         }
     }
 
+    /// <summary>FR-47: 統計の画面で、ボタン別の通算の濃さ(ButtonHeat.Intensities。鍵 → 0〜1)で塗った絵にする。
+    /// 重ねるパネルとは別の PadView で使い、Render とは混ぜない。スキンは呼ぶ側が選ぶ(Unmapped では呼ばない)。
+    /// 一番多いボタンは線も太くする(色だけで示さない。画面設計書 §6)。アーケードのレバーは塗らない。</summary>
+    public void ShowHeat(Skin skin, PadInfo pad, Settings settings, IReadOnlyDictionary<string, double> heat)
+    {
+        _builtFor = ""; // 後で Render が来ても作り直すように
+        Build(skin, pad, settings);
+        ShowStatus(null);
+        var pressed = Draw.Pressed(settings);
+        var color = ((SolidColorBrush)pressed).Color;
+        foreach (var p in _parts)
+        {
+            var el = p.El;
+            double v = heat.GetValueOrDefault(el.Key);
+            var brush = v > 0 ? Draw.Freeze(new SolidColorBrush(color) { Opacity = ButtonHeat.Opacity(v) }) : Brushes.Transparent;
+            switch (el.Kind)
+            {
+                case K.Trigger:
+                    p.Fill!.Width = el.W;
+                    p.Fill.Fill = brush;
+                    break;
+                case K.Lever:
+                    p.Shape!.Fill = Draw.Line;
+                    break;
+                case K.Deco:
+                    break;
+                default: // ボタンと、スティックの押し込み(つまみは真ん中のまま)
+                    p.Shape!.Fill = brush;
+                    p.Shape.Stroke = v >= 1 ? pressed : Draw.Line;
+                    p.Shape.StrokeThickness = v >= 1 ? Draw.Thick : Draw.Thin;
+                    // 薄い塗りは地の色が透けるので、半分より濃いときだけ塗りに合わせた文字の色にする
+                    var fg = v >= 0.5 ? Draw.OnPressed(pressed) : Draw.TextBrush;
+                    if (p.Label is not null) p.Label.Foreground = fg;
+                    if (p.Arrow is not null) p.Arrow.Fill = fg;
+                    break;
+            }
+        }
+    }
+
     /// <summary>レバーは十字キー(押されていなければ左スティック)の方向へ動く(§9.5.3)。</summary>
     static (float X, float Y) LeverOffset(PadSnapshot s)
     {
