@@ -58,6 +58,10 @@ public sealed class InputEngine
     public IReadOnlyDictionary<uint, PadState> Pads => _state.Pads;
     public bool SessionActive => _session.Active;
 
+    /// <summary>診断のタブが測っている間だけ入る受け手(§9.20)。割り当てのあるパッドのイベント 1 件ごとに、そのパッドの今の状態を渡す。
+    /// SDL のスレッドから呼ぶので、受け手は待たずに積むだけにする。</summary>
+    public Action<DiagSample>? DiagTap { get; set; }
+
     public void Configure(EngineConfig c)
     {
         _config = c;
@@ -106,6 +110,8 @@ public sealed class InputEngine
             _session.OnInput(e.TimestampNs, r.InputKey, pad.Info);
         if (e is ButtonChanged bc && pad.Info.IsMapped)
             _chatter.Apply(bc.InstanceId, bc.Button, bc.Down, bc.TimestampNs);
+        if (DiagTap is { } tap && pad.Info.IsMapped)
+            tap(DiagSample.Of(e.TimestampNs, pad));
         if (r.ButtonPress)
             OnPress(pad.Info.InstanceId, e.TimestampNs);
         if (pad.Info.InstanceId == _selector.Selected && e is AxisChanged ax)

@@ -22,7 +22,17 @@ public sealed record PadInfo(
     bool IsMapped,
     string TypeName = "",
     IReadOnlyList<string?>? FaceLabels = null,
-    int RawButtons = 0, int RawAxes = 0, int RawHats = 0);
+    int RawButtons = 0, int RawAxes = 0, int RawHats = 0)
+{
+    /// <summary>USB の VID・PID(§9.20 のパッドの情報。分からなければ 0)。</summary>
+    public ushort Vendor { get; init; }
+    public ushort Product { get; init; }
+    /// <summary>"Wired"・"Wireless"・"Unknown"(SDL_GetJoystickConnectionState)。</summary>
+    public string Connection { get; init; } = "Unknown";
+    /// <summary>SDL が教える振動の可否(FR-58)。問い合わせだけで、パッドには何も送らない。</summary>
+    public bool CanVibrate { get; init; }
+    public bool CanVibrateTriggers { get; init; }
+}
 
 public abstract record InputEvent(ulong TimestampNs, uint InstanceId);
 public sealed record PadAdded(ulong TimestampNs, uint InstanceId, PadInfo Info) : InputEvent(TimestampNs, InstanceId);
@@ -105,6 +115,8 @@ public sealed record PadSnapshot(
     public int? MappingCount { get; init; }
     /// <summary>ボタンの検査の数(FR-45)。鍵は InstanceId → ボタン。押したことのあるボタンだけ。</summary>
     public IReadOnlyDictionary<uint, IReadOnlyDictionary<PadButton, ChatterCount>> Chatter { get; init; } = new Dictionary<uint, IReadOnlyDictionary<PadButton, ChatterCount>>();
+    /// <summary>パッドの電池(§9.20)。SDL のスレッドが 5 秒ごとに問い合わせる。鍵は InstanceId。</summary>
+    public IReadOnlyDictionary<uint, PadPower> Power { get; init; } = new Dictionary<uint, PadPower>();
     public bool SessionActive => Session.Active;
 
     public static PadSnapshot Empty { get; } = new(0, null, false, new HashSet<PadButton>(), default, default, 0, 0, [],

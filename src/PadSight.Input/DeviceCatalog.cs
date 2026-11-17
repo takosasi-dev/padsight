@@ -19,8 +19,39 @@ public static class DeviceCatalog
                 buttons.Add((PadButton)b);
         string?[] faces = [.. new[] { SDL.GamepadButton.South, SDL.GamepadButton.East, SDL.GamepadButton.West, SDL.GamepadButton.North }
             .Select(b => Label(SDL.GetGamepadButtonLabel(handle, b)))];
+        var (motors, triggers) = PadVibration.Caps(handle);
         return new PadInfo(id, Guid(id), SDL.GetGamepadName(handle) ?? SDL.GetGamepadNameForID(id) ?? "(名前なし)",
-            Kind(type), buttons, true, type.ToString(), faces);
+            Kind(type), buttons, true, type.ToString(), faces)
+        {
+            // §9.20 のパッドの情報。どれも SDL への問い合わせだけ
+            Vendor = SDL.GetGamepadVendor(handle),
+            Product = SDL.GetGamepadProduct(handle),
+            Connection = Connection(SDL.GetGamepadConnectionState(handle)),
+            CanVibrate = motors,
+            CanVibrateTriggers = triggers,
+        };
+    }
+
+    static string Connection(SDL.JoystickConnectionState s) => s switch
+    {
+        SDL.JoystickConnectionState.Wired => "Wired",
+        SDL.JoystickConnectionState.Wireless => "Wireless",
+        _ => "Unknown",
+    };
+
+    /// <summary>電池の状態(§9.20)。SDL への問い合わせだけ。</summary>
+    public static PadPower Power(nint gamepad)
+    {
+        var state = SDL.GetGamepadPowerInfo(gamepad, out int percent);
+        string name = state switch
+        {
+            SDL.PowerState.OnBattery => "OnBattery",
+            SDL.PowerState.Charging => "Charging",
+            SDL.PowerState.Charged => "Charged",
+            SDL.PowerState.NoBattery => "NoBattery",
+            _ => "Unknown",
+        };
+        return new PadPower(name, percent);
     }
 
     public static PadInfo Joystick(uint id, nint handle) =>

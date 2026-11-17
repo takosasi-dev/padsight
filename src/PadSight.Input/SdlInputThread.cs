@@ -46,6 +46,17 @@ public sealed class SdlInputThread
     InputEngine? _demoEngine;
     EngineConfig? _demoConfigFrom;
     static readonly StopwatchClock DemoClock = new();
+    // §9.20: 診断のタブが測っている間だけ、イベント 1 件ごとの状態を積む。UI が描画のたびに取り出す。上限を超えたら古い物から捨てる
+    const int DiagCap = 20_000;
+    readonly ConcurrentQueue<DiagSample> _diag = new();
+    int _diagCount;
+    Action<DiagSample>? _diagTap;
+    // SDL の関数を呼ぶ頼み(振動テスト)。SDL が動いているときだけ、このスレッドで実行する
+    readonly ConcurrentQueue<Action> _sdlCommands = new();
+    // §9.20 の電池。5 秒ごとに問い合わせ、変わったときだけ写しを作り直す
+    const ulong PowerEveryNs = 5 * Values.NsPerSecond;
+    ulong _lastPowerNs;
+    IReadOnlyDictionary<uint, PadPower> _power = new Dictionary<uint, PadPower>();
 
     sealed class StopwatchClock : IClock
     {
@@ -88,6 +99,48 @@ public sealed class SdlInputThread
             var e = new SDL.Event { Type = (uint)SDL.EventType.User };
             SDL.PushEvent(ref e);
         }
+    }
+
+    /// <summary>診断用の細かい値を積み始める・やめる(§9.20)。やめたら積んである物も捨てる。</summary>
+    public void SetDiagTap(bool on) => Post(engine =>
+    {
+        _diagTap = on ? EnqueueDiag : null;
+        engine.DiagTap = _diagTap;
+        if (_demoEngine is not null)
+            _demoEngine.DiagTap = _diagTap;
+        if (!on)
+            while (_diag.TryDequeue(out _))
+                Interlocked.Decrement(ref _diagCount);
+    });
+
+    void EnqueueDiag(DiagSample s)
+    {
+        _diag.Enqueue(s);
+        if (Interlocked.Increment(ref _diagCount) > DiagCap && _diag.TryDequeue(out _))
+            Interlocked.Decrement(ref _diagCount);
+    }
+
+    /// <summary>積んである診断用の細かい値を、古い順に into へ移す(UI のスレッドから呼ぶ)。</summary>
+    public void DrainDiag(List<DiagSample> into)
+    {
+        while (_diag.TryDequeue(out var s))
+        {
+            Interlocked.Decrement(ref _diagCount);
+            into.Add(s);
+        }
+    }
+
+    /// <summary>振動テスト(FR-58・D-28)。利用者がボタンを押したときだけ呼ぶ。triggers なら low・high は左右のトリガー。</summary>
+    public void Vibrate(uint padId, ushort low, ushort high, bool triggers)
+    {
+        _sdlCommands.Enqueue(() =>
+        {
+            if (!_open.TryGetValue(padId, out var o) || !o.IsGamepad)
+                return;
+            bool sent = triggers ? PadVibration.Triggers(o.Handle, low, high) : PadVibration.Motors(o.Handle, low, high);
+            _log(sent ? "振動テストを送った" : "振動テストを送れなかった: " + (SDL.GetError() ?? "").Split('\n')[0]);
+        });
+        Wake();
     }
 
     /// <summary>デモの入力を流す・止める(FR-40)。</summary>
@@ -143,7 +196,7 @@ public sealed class SdlInputThread
                 case 1 when _demo is null:
                     ulong start = DemoClock.MonotonicNs;
                     _demo = new DemoPlayer(start);
-                    _demoEngine = new InputEngine(DemoClock, DemoConfig());
+                    _demoEngine = new InputEngine(DemoClock, DemoConfig()) { DiagTap = _diagTap }; // デモでも診断を試せるように
                     _demoEngine.Apply(_demo.Added());
                     break;
                 case 0:
@@ -152,6 +205,11 @@ public sealed class SdlInputThread
                     dirty = true; // 本物の状態を出し直す
                     break;
             }
+            if (ok)
+                while (_sdlCommands.TryDequeue(out var sdlCommand))
+                    sdlCommand();
+            else
+                _sdlCommands.Clear(); // SDL が動いていないので送れない(呼ぶと DLL が無いときに落ちる)
             if (!ok)
             {
                 FlushFinalized();
@@ -183,6 +241,11 @@ public sealed class SdlInputThread
                 if (_engine.Tick(now) is { } cp)
                     _checkpoint(cp);
                 dirty = true;
+                if (Values.Since(now, _lastPowerNs) >= PowerEveryNs)
+                {
+                    _lastPowerNs = now;
+                    UpdatePower();
+                }
             }
             FlushFinalized();
             sinceMs = (Stopwatch.GetTimestamp() - lastPublish) * 1000 / Stopwatch.Frequency;
@@ -198,7 +261,7 @@ public sealed class SdlInputThread
             else if (dirty && sinceMs >= MinPublishTicks)
             {
                 lastPublish = Stopwatch.GetTimestamp();
-                _publish(_engine.Snapshot(now, lastPublish, InputStatus.Running, null, _mappingCount));
+                _publish(_engine.Snapshot(now, lastPublish, InputStatus.Running, null, _mappingCount) with { Power = _power });
                 dirty = false;
             }
         }
@@ -254,6 +317,17 @@ public sealed class SdlInputThread
         }
         _open.Clear();
         SDL.Quit();
+    }
+
+    /// <summary>つながっているパッドの電池を問い合わせ、変わっていれば写しを作り直す(§9.20)。</summary>
+    void UpdatePower()
+    {
+        var next = new Dictionary<uint, PadPower>();
+        foreach (var (id, o) in _open)
+            if (o.IsGamepad)
+                next[id] = DeviceCatalog.Power(o.Handle);
+        if (next.Count != _power.Count || next.Any(kv => !_power.TryGetValue(kv.Key, out var p) || p != kv.Value))
+            _power = next;
     }
 
     const int DemoStepMs = 16;

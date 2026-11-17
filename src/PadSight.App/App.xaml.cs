@@ -40,6 +40,8 @@ public partial class App : Application
 
     public Settings Settings { get; private set; } = new();
     public SessionStore Sessions { get; private set; } = null!;
+    /// <summary>診断の結果の記録(FR-60)。</summary>
+    public DiagStore Diagnostics { get; } = new(DataDir);
     public SnapshotBus Bus { get; } = new();
     public PanelManager Panels { get; private set; } = null!;
     public ObservableCollection<Banner> Banners { get; } = [];
@@ -146,6 +148,15 @@ public partial class App : Application
     }
 
     public void PostToInput(Action<InputEngine> command) => _input.Post(command);
+
+    /// <summary>§9.20: 診断のタブが測っている間だけ、診断用の細かい値を積ませる。</summary>
+    public void SetDiagTap(bool on) => _input.SetDiagTap(on);
+
+    /// <summary>積まれた診断用の細かい値を取り出す(古い順)。</summary>
+    public void DrainDiag(List<DiagSample> into) => _input.DrainDiag(into);
+
+    /// <summary>FR-58・D-28: 振動テスト。利用者が振動テストのボタンを押したときだけ呼ぶ。</summary>
+    public void Vibrate(uint padId, ushort low, ushort high, bool triggers) => _input.Vibrate(padId, low, high, triggers);
 
     /// <summary>FR-40。保存しないので、起動したときはいつも止まっている。</summary>
     public bool DemoRunning { get; private set; }
@@ -420,8 +431,8 @@ public partial class App : Application
             foreach (var w in _drift.Feed(now, p.InstanceId, p.Name, left, right, Settings.Deadzone))
             {
                 AppLog.Write($"スティックのずれの知らせを出した({(w.Right ? "右" : "左")})"); // 値は軸の値なのでログに書かない(§9.15)
-                SetBanner(w.Key, $"{w.PadName} の{(w.Right ? "右" : "左")}スティックが、触っていないのに {w.Mean.ToString("0.000", inv)} ずれています(デッドゾーン {w.Deadzone.ToString("0.00", inv)})。スティック診断で確かめられます",
-                    "Warning", "スティック診断を開く", () => { ClearBanner(w.Key); OpenMain(); _main?.SelectTab(2); });
+                SetBanner(w.Key, $"{w.PadName} の{(w.Right ? "右" : "左")}スティックが、触っていないのに {w.Mean.ToString("0.000", inv)} ずれています(デッドゾーン {w.Deadzone.ToString("0.00", inv)})。診断のスティックで確かめられます",
+                    "Warning", "診断を開く", () => { ClearBanner(w.Key); OpenMain(); _main?.SelectDiag(1); });
             }
         }
     }

@@ -4,8 +4,6 @@ T:System.Net.Sockets.Socket;INV-9: no network
 T:System.Net.WebClient;INV-9: no network
 T:System.Net.WebRequest;INV-9: no network
 M:SDL3.SDL.AttachVirtualJoystick(SDL3.SDL.VirtualJoystickDesc@);INV-3: never write to the pad
-M:SDL3.SDL.RumbleGamepad(System.IntPtr,System.UInt16,System.UInt16,System.UInt32);INV-3: never write to the pad
-M:SDL3.SDL.RumbleGamepadTriggers(System.IntPtr,System.UInt16,System.UInt16,System.UInt32);INV-3: never write to the pad
 M:SDL3.SDL.RumbleJoystick(System.IntPtr,System.Int16,System.Int16,System.Int32);INV-3: never write to the pad
 M:SDL3.SDL.RumbleJoystickTriggers(System.IntPtr,System.Int16,System.Int16,System.Int32);INV-3: never write to the pad
 M:SDL3.SDL.SendGamepadEffect(System.IntPtr,System.Byte[],System.Int32);INV-3: never write to the pad

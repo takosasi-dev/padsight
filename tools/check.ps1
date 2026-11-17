@@ -12,7 +12,7 @@ $banned = @(
     'System.Diagnostics.Process', 'GetProcesses', 'CreateToolhelp32Snapshot',
     'SetWindowsHookEx', 'BitBlt', 'CopyFromScreen', 'PrintWindow', 'Windows.Graphics.Capture',
     'IDXGI', 'D3D11', 'D3D12', 'Vulkan',
-    'Rumble', 'SetGamepadLED', 'SetJoystickLED', 'SendGamepadEffect', 'SendJoystickEffect',
+    'SetGamepadLED', 'SetJoystickLED', 'SendGamepadEffect', 'SendJoystickEffect',
     'SensorEnabled', 'PlayerIndex', 'AttachVirtualJoystick', 'ALLOW_STEAM_VIRTUAL_GAMEPAD',
     'SendInput', 'keybd_event', 'mouse_event', 'ViGEm',
     'GetAsyncKeyState', 'GetKeyboardState', 'RegisterRawInputDevices', 'SDL_INIT_VIDEO',
@@ -33,6 +33,9 @@ $importAllowed = @(
 # INV-9: the network is allowed only in this file (two fixed GitHub URLs, spec 9.17).
 $netAllowed = 'src\PadSight.App\WebFetch.cs'
 
+# D-28: vibration (the only exception to INV-3) is allowed only in this file, and only on a user's button press.
+$rumbleAllowed = 'src\PadSight.Input\SdlRumble.cs'
+
 $extensions = @('.cs', '.xaml', '.csproj', '.props', '.ps1', '.json', '.txt')
 $ic = [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
 
@@ -46,6 +49,7 @@ $importRules = @('DllImport', 'LibraryImport' | ForEach-Object { New-Rule $_ ([r
 $overlayCoreRule = New-Rule 'PadSight (INV-16)' 'PadSight'
 $projectRefRule = New-Rule 'ProjectReference (INV-16)' 'ProjectReference'
 $netRule = New-Rule 'HttpClient (INV-9)' 'HttpClient'
+$rumbleRule = New-Rule 'Rumble (INV-3, D-28)' 'Rumble'
 
 $hits = New-Object System.Collections.Generic.List[string]
 
@@ -65,6 +69,7 @@ foreach ($dir in @('src', 'tests', 'tools')) {
         $rules = $always
         if (-not ($importAllowed -contains $rel)) { $rules += $importRules }
         if ($rel -ne $netAllowed) { $rules += $netRule }
+        if ($rel -ne $rumbleAllowed) { $rules += $rumbleRule }
         if ($rel -like 'src\OverlayCore\*') { $rules += $overlayCoreRule }
         if ($rel -eq 'src\OverlayCore\OverlayCore.csproj') { $rules += $projectRefRule }
 

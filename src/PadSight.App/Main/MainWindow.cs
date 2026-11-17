@@ -1,4 +1,4 @@
-// メインの画面の外枠(画面設計書 §4.5〜§4.9・§4.8b)。6 つのタブ、上の帯(知らせ)、パネルの表示の状態を持つ。
+// メインの画面の外枠(画面設計書 §4.5〜§4.9・§4.8b)。診断のタブは PadLab を統合した物(§4.7)。6 つのタブ、上の帯(知らせ)、パネルの表示の状態を持つ。
 // × は隠すだけでトレイに残る(FR-14)。Ctrl+1〜6 でタブを切り替え、Esc は測定やホットキーの受け付けを止める(§5)。
 using System.Collections.Specialized;
 using System.Windows;
@@ -17,7 +17,7 @@ public sealed class MainWindow : Window
     readonly System.Windows.Shapes.Ellipse _stateDot = new() { Width = 8, Height = 8, VerticalAlignment = VerticalAlignment.Center };
     readonly HomeTab _home = new();
     readonly PanelsTab _panels = new();
-    readonly DiagTab _diag = new();
+    readonly DiagnosticsTab _diag = new();
     readonly StatsTab _stats = new();
     readonly SettingsTab _settings = new();
     readonly MeasureTab _measure = new();
@@ -38,7 +38,7 @@ public sealed class MainWindow : Window
 
         _tabs.Items.Add(new TabItem { Header = "ホーム", Content = _home });
         _tabs.Items.Add(new TabItem { Header = "パネル", Content = _panels });
-        _tabs.Items.Add(new TabItem { Header = "スティック診断", Content = _diag });
+        _tabs.Items.Add(new TabItem { Header = "診断", Content = _diag });
         _tabs.Items.Add(new TabItem { Header = "統計", Content = _stats });
         _tabs.Items.Add(new TabItem { Header = "設定", Content = _settings });
         _tabs.Items.Add(new TabItem { Header = "計測", Content = _measure });
@@ -47,6 +47,7 @@ public sealed class MainWindow : Window
             if (e.Source != _tabs) return;
             if (_tabs.SelectedItem is TabItem { Content: StatsTab st }) st.Reload();
             if (_tabs.SelectedItem is not TabItem { Content: MeasureTab }) _measure.Cancel(); // 描画が止まると時間を測れないので、離れたら止める
+            if (_tabs.SelectedItem is not TabItem { Content: DiagnosticsTab }) _diag.Cancel(); // 離れたら測定と細かい値の積み上げを止める
             if (_tabs.SelectedItem is not TabItem { Content: SettingsTab }) _settings.CancelCapture(); // 受け付けたまま離れると、Ctrl+数字がホットキーになってしまう
         };
 
@@ -74,7 +75,14 @@ public sealed class MainWindow : Window
         Deactivated += (_, _) => _settings.CancelCapture();
     }
 
-    /// <summary>タブを選ぶ(0 から。2 はスティック診断)。帯のボタンから使う。</summary>
+    /// <summary>診断のタブを開き、そのページを選ぶ(0 から。1 はスティック)。帯のボタンから使う。</summary>
+    public void SelectDiag(int page)
+    {
+        _tabs.SelectedItem = _tabs.Items.Cast<TabItem>().First(t => t.Content == _diag);
+        _diag.SelectPage(page);
+    }
+
+    /// <summary>タブを選ぶ(0 から。2 は診断)。帯のボタンから使う。</summary>
     public void SelectTab(int index) => _tabs.SelectedIndex = index;
 
     void UpdateState()
@@ -121,7 +129,7 @@ public sealed class MainWindow : Window
         {
             case TabItem { Content: HomeTab h }: h.Render(s, nowNs, IsActive); break;
             case TabItem { Content: PanelsTab p }: p.Render(s, nowNs); break;
-            case TabItem { Content: DiagTab d }: d.Render(s); break;
+            case TabItem { Content: DiagnosticsTab d }: d.Render(s, nowNs); break;
             case TabItem { Content: StatsTab st }: st.Render(s); break;
             case TabItem { Content: MeasureTab m }: m.Render(s, nowNs); break;
         }
