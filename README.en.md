@@ -8,7 +8,9 @@ It also includes the features of PadLab, a controller diagnostics tool, as the d
 
 The user interface is in Japanese only.
 
-![Four panels (pad view, input history, sticks, stats)](docs/images/panels.png)
+![The four panels (pad view, input history, sticks, stats) driven by the demo input](docs/images/panels.gif)
+
+(12 seconds of the built-in demo input: left stick circle, down / down-right / right + X (marked as 236), mashing A, triggers, right stick in 8 directions, LB, RB, Y, B.)
 
 ## Features
 
@@ -91,12 +93,16 @@ Other tools:
 | `tools\OverlayProbe` | Shows a single overlay window to test click-through |
 | `tests\fixtures\DummyGame` | A full-screen test window that only counts clicks |
 | `tools\check.ps1` | Searches the source for APIs that would touch other processes, use the network outside WebFetch.cs, or write to pads |
+| `tools\StartSmoke` | Runs only the start of the app (App setup) without a window. Used by CI and `publish.ps1` |
+| `tools\PerfProbe` | Measures input processing time and allocations with synthetic input |
+| `tools\UiPerfProbe` | Renders the panels and the main window without a window and measures per-frame time and allocations. `shots` and `diff` compare before/after images pixel by pixel |
+| `tools\readme-gif.ps1` | Rebuilds the animation in this README (needs ffmpeg) |
 
 Data lives in `%LOCALAPPDATA%\PadSight\` (settings, session totals, logs). To add controller mappings, place `gamecontrollerdb.txt` from [SDL_GameControllerDB](https://github.com/mdqinc/SDL_GameControllerDB) in the same folder (up to 1 MB).
 
 ## Status
 
-v0.1.0 (in development). All features are in place and the unit tests (231) pass, but **it has not yet been tested with real pads**. The default input backend, the check that pads are left unchanged, and performance measurements are still to be done on real hardware.
+v0.1.0 (in development). All features are in place and the unit tests (420) pass, but **it has not yet been tested with real pads**. The default input backend, the check that pads are left unchanged, and performance measurements are still to be done on real hardware.
 
 ## License
 

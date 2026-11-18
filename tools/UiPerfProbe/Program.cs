@@ -6,6 +6,7 @@
 // 実行: dotnet run -c Release --project tools\UiPerfProbe            … 表を出す
 //       dotnet run -c Release --project tools\UiPerfProbe -- shots <dir> … 決まった入力の流れでパネル 4 枚とトリガーのページを PNG にする
 //       (直す前後で PNG のハッシュが同じなら、見た目は変わっていない)
+//       dotnet run -c Release --project tools\UiPerfProbe -- gif <dir>   … README の動く絵の元(デモの 12 秒を 25 fps の PNG に)
 // WPF が実際に画面へ描く時間(合成のスレッド)は測れない。測るのは UI のスレッドの仕事だけ。
 using System.Diagnostics;
 using System.IO;
@@ -67,6 +68,11 @@ var th = new Thread(() =>
         if (args.Length == 2 && args[0] == "main")
         {
             MainShots(args[1]);
+            return;
+        }
+        if (args.Length == 2 && args[0] == "gif")
+        {
+            Gif(args[1]);
             return;
         }
         if (args.Length == 2 && args[0] == "shots")
@@ -190,6 +196,66 @@ static void Shots(IEnumerable<Target> targets, string dir)
         }
     }
     Console.WriteLine("shots: " + dir);
+}
+
+// README の動く絵: デモの入力(DemoScript、12 秒で 1 周)でパネル 4 枚を動かし、25 fps の PNG を出す。2 周慣らしてから 3 周目を撮る。
+// GIF にするのは ffmpeg(tools\readme-gif.ps1)
+static void Gif(string dir)
+{
+    const ulong Step = 16_000_000, FrameNs = 40_000_000; // SdlInputThread のデモと同じ 16 ミリ秒ごとに進める
+    const int PerCycle = (int)(DemoScript.CycleNs / FrameNs);
+    Directory.CreateDirectory(dir);
+    App.Current.Settings.History.Rows = 10;
+    var canvas = new Canvas { Width = 668, Height = 530, Background = new LinearGradientBrush(Color.FromRgb(0x24, 0x33, 0x52), Color.FromRgb(0x15, 0x19, 0x24), 30) };
+    TextElement.SetFontFamily(canvas, new FontFamily("Yu Gothic UI"));
+    PanelView[] views = [new PadView(), new StickView(), new HistoryView(), new StatsView()];
+    Point[] at = [new(16, 16), new(16, 272), new(392, 16), new(392, 284)];
+    for (int i = 0; i < views.Length; i++)
+    {
+        // OverlayWindow の _panel と同じ枠(背景は既定の黒 85%)
+        var panel = new Border
+        {
+            CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), Child = views[i],
+            BorderBrush = new SolidColorBrush(Color.FromArgb(90, 255, 255, 255)), Background = new SolidColorBrush(Color.FromArgb(217, 0, 0, 0)),
+        };
+        Canvas.SetLeft(panel, at[i].X);
+        Canvas.SetTop(panel, at[i].Y);
+        canvas.Children.Add(panel);
+    }
+    canvas.Measure(new Size(668, 530));
+    canvas.Arrange(new Rect(0, 0, 668, 530));
+    var clock = new SimClock();
+    var engine = new InputEngine(clock, EngineConfig.From(App.Current.Settings) with { SelectionMode = "last_used", PinnedGuid = null });
+    var demo = new DemoPlayer(0);
+    engine.Apply(demo.Added());
+    var snap = engine.Snapshot(0, 0);
+    ulong t = 0;
+    for (int f = 0; f < 3 * PerCycle; f++)
+    {
+        ulong now = (ulong)f * FrameNs;
+        for (; t <= now; t += Step)
+        {
+            clock.MonotonicNs = t;
+            foreach (var ev in demo.Advance(t))
+                engine.Apply(ev);
+            engine.Tick(t);
+            engine.TakeFinalized();
+            snap = engine.Snapshot(t, 0);
+        }
+        App.Current.Bus.Publish(snap);
+        foreach (var v in views)
+            PanelRender(v, snap, now);
+        canvas.UpdateLayout();
+        if (f < 2 * PerCycle)
+            continue;
+        var bmp = new RenderTargetBitmap(668, 530, 96, 96, PixelFormats.Pbgra32);
+        bmp.Render(canvas);
+        var enc = new PngBitmapEncoder();
+        enc.Frames.Add(BitmapFrame.Create(bmp));
+        using var file = File.Create(Path.Combine(dir, $"{f - 2 * PerCycle:000}.png"));
+        enc.Save(file);
+    }
+    Console.WriteLine("gif: " + dir);
 }
 
 // メインの画面(窓は出さず、中身だけを同じ大きさの枠に移す)を、パッドを 1 台つないで 3 秒操作した後の状態で、タブごと・診断のページごと・明暗で撮る
