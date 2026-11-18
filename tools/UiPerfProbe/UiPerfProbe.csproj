@@ -1,0 +1,19 @@
+<!-- UiPerfProbe: パネルとメインの画面のタブを窓なしで 1 フレームずつ描かせ、1 フレームの時間と割り当てを測る。 -->
+<!-- 窓は出さない(Show しない)。記録の置き場所は一時フォルダに差し替える。使い方は Program.cs の頭に書いた。 -->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PadSight.App\PadSight.App.csproj" />
+    <!-- pack://application は起動した exe の中を見るので、アイコンをこちらにも入れる -->
+    <Resource Include="..\..\src\PadSight.App\padsight.ico" Link="padsight.ico" />
+  </ItemGroup>
+
+</Project>

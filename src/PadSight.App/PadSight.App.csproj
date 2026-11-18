@@ -8,6 +8,8 @@
     <RootNamespace>PadSight.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>padsight.ico</ApplicationIcon>
+    <!-- 画面は日本語だけなので、.NET と WPF の他の言語の表示用ファイルを配布物に入れない(exe が 138.3 MB から 129.7 MB に。2026-11-18) -->
+    <SatelliteResourceLanguages>ja</SatelliteResourceLanguages>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\PadSight.Core\PadSight.Core.csproj" />

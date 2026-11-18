@@ -25,7 +25,7 @@ public sealed class StickView : PanelView
         public required TranslateTransform Knob;
         public required Ellipse Cap;
         public required Ellipse Ring;
-        public required Line[] Trail;
+        public required TrailLines Trail;
         public required OutlineText[] Rows;
         public required OutlineText TriggerLabel;
         public required Rectangle TriggerFill;
@@ -57,12 +57,8 @@ public sealed class StickView : PanelView
         Canvas.Children.Add(new Ellipse { Width = R, Height = R, Stroke = Draw.Faint, StrokeThickness = 1 }.At(cx - R / 2, cy - R / 2));
         var dz = new Ellipse { Fill = Draw.Body, Stroke = Draw.Weak, StrokeThickness = 1.25, StrokeDashArray = [3, 2] };
         Canvas.Children.Add(dz);
-        var trail = new Line[Segments];
-        for (int i = 0; i < Segments; i++)
-        {
-            trail[i] = new Line { Stroke = Draw.Line, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, Visibility = Visibility.Hidden };
-            Canvas.Children.Add(trail[i]);
-        }
+        var trail = new TrailLines();
+        Canvas.Children.Add(trail);
         // 今の位置: 縁取りの付いた小さい頭。押し込み中は押したときの色で塗り、外に輪を出す(色だけで示さない)
         var knob = new TranslateTransform();
         var ring = new Ellipse { Width = 22, Height = 22, StrokeThickness = Draw.Thin, RenderTransform = knob, Visibility = Visibility.Hidden };
@@ -132,21 +128,18 @@ public sealed class StickView : PanelView
             first++;
         int count = span == 0 ? 0 : trail.Count - first;
         int step = Math.Max(1, (int)Math.Ceiling(count / (double)Segments));
-        int used = 0;
-        for (int i = step; i < count && used < Segments; i += step, used++)
+        var segs = side.Trail.Segments;
+        bool wasEmpty = segs.Count == 0;
+        segs.Clear();
+        for (int i = step; i < count && segs.Count < Segments; i += step)
         {
             var a = trail[first + i - step];
             var b = trail[first + i];
-            var line = side.Trail[used];
-            line.X1 = cx + a.X * R; line.Y1 = cy - a.Y * R;
-            line.X2 = cx + b.X * R; line.Y2 = cy - b.Y * R;
             double fresh = 1 - Math.Clamp(nowNs > b.Ns ? (nowNs - b.Ns) / (double)span : 0, 0, 1);
-            line.Opacity = 0.08 + 0.72 * fresh * fresh;
-            line.StrokeThickness = 1 + 2.5 * fresh;
-            line.Visibility = Visibility.Visible;
+            segs.Add(new(new Point(cx + a.X * R, cy - a.Y * R), new Point(cx + b.X * R, cy - b.Y * R), 0.08 + 0.72 * fresh * fresh, 1 + 2.5 * fresh));
         }
-        for (int i = used; i < Segments; i++)
-            side.Trail[i].Visibility = Visibility.Hidden;
+        if (!(wasEmpty && segs.Count == 0))
+            side.Trail.InvalidateVisual();
 
         // 数値は値が変わったときだけ書き直す(軌跡のある間は毎フレーム描くため)
         if (side.Shown != (v, st.ShowRaw))
@@ -186,4 +179,36 @@ public sealed class StickView : PanelView
     /// <summary>見出しと値を交互に渡す(見出しは弱い色)。</summary>
     static void Row(OutlineText row, params string[] parts) =>
         row.SetRuns(parts.Select((t, i) => (t, i % 2 == 0 ? (Brush)Draw.Weak : Draw.TextBrush)));
+}
+
+/// <summary>軌跡の線(最大 64 本)を 1 つの部品の中で描く。線の部品(Shape)を 64 個並べて毎フレーム座標と太さを変えると、
+/// そのたびにペン・図形・レイアウトが作り直されて重かった(1 フレーム約 460 KB・2.5 ミリ秒、2026-11-18 に UiPerfProbe で測った)。
+/// 描き方(色・丸い端・線ごとの濃さ)は前の Line と同じ。</summary>
+public sealed class TrailLines : FrameworkElement
+{
+    public readonly record struct Segment(Point A, Point B, double Opacity, double Thickness);
+
+    /// <summary>古い順。書き換えたら InvalidateVisual を呼ぶ。</summary>
+    public List<Segment> Segments { get; } = new(64);
+
+    public TrailLines() => IsHitTestVisible = false;
+
+    protected override void OnRender(DrawingContext dc)
+    {
+        if (Segments.Count == 0)
+            return;
+        // 共通のブラシ(Draw.Line)はテーマで色を変えるため凍らせていない。凍らせていないブラシを毎フレーム 128 本のペンに渡すと、
+        // ブラシが使っている物の一覧を伸ばし続けて大量に割り当てる(FreezableContextPair[])。今の色で凍らせた写しを使う。
+        // テーマを変えたときは、軌跡のある間は毎フレーム描くので次のフレームで新しい色になる
+        var brush = Draw.Line.CloneCurrentValue();
+        brush.Freeze();
+        foreach (var s in Segments)
+        {
+            var pen = new Pen(brush, s.Thickness) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+            pen.Freeze();
+            dc.PushOpacity(s.Opacity);
+            dc.DrawGeometry(null, pen, new LineGeometry(s.A, s.B));
+            dc.Pop();
+        }
+    }
 }

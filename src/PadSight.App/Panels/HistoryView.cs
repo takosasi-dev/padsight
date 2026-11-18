@@ -39,9 +39,16 @@ public sealed class HistoryView : PanelView
         public required OutlineText Gap;
         public HistoryRow? Shown;
         public Layout Layout;
+        /// <summary>今いる段(0 が一番上)。-1 はまだ置いていない</summary>
+        public int Slot = -1;
+        /// <summary>止めている間の一番上の段として組んだか(右端を「停止中」の分空ける)</summary>
+        public bool TopPaused;
     }
 
     readonly List<Row> _rows = [];
+    // 段ごとの行の部品(描くたびに使い回す。割り当てない)
+    Row?[] _slots = [];
+    readonly List<Row> _free = [];
     readonly OutlineText _empty;
     readonly Border _paused;
     readonly OutlineText _pausedText;
@@ -100,20 +107,15 @@ public sealed class HistoryView : PanelView
         var pad = s.Pad;
         var skin = Labels.ChooseSkin(pad, pad is null ? null : settings.Devices.GetValueOrDefault(pad.Guid));
         var layout = new Layout(settings.History.FrameBase, settings.History.DirectionStyle == "arrow", settings.LabelStyle, settings.PressedColor, Paused, skin, pad);
-        for (int i = 0; i < _rows.Count; i++)
+        int count = Math.Min(_rows.Count, s.History.Count);
+        Assign(s.History, count);
+        for (int i = 0; i < count; i++)
         {
-            var row = _rows[i];
-            if (i >= s.History.Count)
-            {
-                if (row.Shown is not null)
-                {
-                    row.Shown = null;
-                    row.Host.Visibility = Visibility.Hidden;
-                }
-                continue;
-            }
+            var row = _slots[i]!;
             var h = s.History[i];
-            bool fresh = !ReferenceEquals(row.Shown, h) || row.Layout != layout;
+            Place(row, i);
+            bool topPaused = Paused && i == 0;
+            bool fresh = !ReferenceEquals(row.Shown, h) || row.Layout != layout || row.TopPaused != topPaused;
             // フレーム数は、組み直すときと、伸びている一番上の行だけ数え直す
             if (fresh || h.EndNs is null)
             {
@@ -126,13 +128,58 @@ public sealed class HistoryView : PanelView
                 continue;
             row.Shown = h;
             row.Layout = layout;
+            row.TopPaused = topPaused;
             row.Host.Visibility = Visibility.Visible;
-            Fill(row, h, i, pressed);
+            Fill(row, h, pressed);
+        }
+        foreach (var row in _free)
+        {
+            if (row.Shown is null)
+                continue;
+            row.Shown = null;
+            row.Host.Visibility = Visibility.Hidden;
         }
     }
 
+    /// <summary>行ごとに、すでにその行を出している部品を探して段に割り当てる。新しい行が上に足されたとき、20 行の中身を
+    /// 1 段ずつ書き直すと 1 フレームに 10 ミリ秒を超えた(2026-11-18 に UiPerfProbe で測った)ので、部品ごと 1 段下げ、
+    /// 新しい行には外れた部品を使う。一番上の行は終わると記録が作り直されるが、ボタンの一覧は同じ物を指している。</summary>
+    void Assign(IReadOnlyList<HistoryRow> history, int count)
+    {
+        Array.Clear(_slots);
+        _free.Clear();
+        foreach (var row in _rows)
+        {
+            int at = -1;
+            if (row.Shown is { } shown)
+                for (int i = 0; i < count && at < 0; i++)
+                    if (_slots[i] is null && Same(shown, history[i]))
+                        at = i;
+            if (at >= 0) _slots[at] = row;
+            else _free.Add(row);
+        }
+        int next = 0;
+        for (int i = 0; i < count; i++)
+            if (_slots[i] is null)
+                _slots[i] = _free[next++];
+        _free.RemoveRange(0, next);
+
+        static bool Same(HistoryRow a, HistoryRow b) =>
+            ReferenceEquals(a, b) || a.StartNs == b.StartNs && ReferenceEquals(a.NewlyPressed, b.NewlyPressed) && ReferenceEquals(a.Held, b.Held);
+    }
+
+    void Place(Row row, int slot)
+    {
+        if (row.Slot == slot)
+            return;
+        row.Slot = slot;
+        Canvas.SetTop(row.Host, Top + slot * RowHeight);
+        // 古い行ほど薄く(上から 1.0 → 0.55)。行ごとに 1 つの入れ物にまとめて濃さをかける
+        row.Host.Opacity = 1 - (1 - OldestOpacity) * slot / Math.Max(1, _rows.Count - 1);
+    }
+
     // 1 行を組み直す。行が変わったか、行の形の設定が変わったときだけ呼ぶ
-    void Fill(Row row, HistoryRow h, int index, Brush pressed)
+    void Fill(Row row, HistoryRow h, Brush pressed)
     {
         var (pad, skin, style) = (row.Layout.Pad, row.Layout.Skin, row.Layout.LabelStyle);
         bool arrow = row.Layout.Arrow;
@@ -169,7 +216,7 @@ public sealed class HistoryView : PanelView
         // ずれ(FR-50): 右端に弱い小さい文字で。数は行の長さと同じ単位。文字の幅を測って右に寄せ、ボタンの欄をその分狭める。
         // 止めている間の一番上の行は、右上の「停止中」に重ならないように右端を空ける。
         // 新しく押したボタンが入らなくなるときは、ずれを出さない(ボタンを優先する)
-        double right = PanelWidth - 6 - (row.Layout.Paused && index == 0 ? PausedWidth + 4 : 0);
+        double right = PanelWidth - 6 - (row.TopPaused ? PausedWidth + 4 : 0);
         string gapText = "";
         if (h.MergeGapNs is ulong gap)
         {
@@ -209,6 +256,7 @@ public sealed class HistoryView : PanelView
         Canvas.Height = Height;
         Canvas.Children.Clear();
         _rows.Clear();
+        _slots = new Row?[n];
         Canvas.Children.Add(_current.At(4, Top + 1));
         for (int i = 0; i < n; i++)
         {
@@ -217,8 +265,7 @@ public sealed class HistoryView : PanelView
             badge.Visibility = Visibility.Hidden;
             var row = new Row
             {
-                // 古い行ほど薄く(上から 1.0 → 0.55)。行ごとに 1 つの入れ物にまとめて濃さをかける
-                Host = new Canvas { Width = PanelWidth, Height = RowHeight, Visibility = Visibility.Hidden, Opacity = 1 - (1 - OldestOpacity) * i / Math.Max(1, n - 1) },
+                Host = new Canvas { Width = PanelWidth, Height = RowHeight, Visibility = Visibility.Hidden }, // 段と濃さは Place で決める
                 Frames = new OutlineText { FontFamily = Draw.Mono, FontSize = 15, Foreground = Draw.TextBrush, Width = 56, TextAlignment = TextAlignment.Right },
                 Arrow = Draw.Arrow(12),
                 Dot = new Ellipse { Width = 5, Height = 5, Fill = Draw.TextBrush },
@@ -240,7 +287,7 @@ public sealed class HistoryView : PanelView
             c.Add(row.Badge.At(ButtonsX, (RowHeight - PillHeight) / 2));
             c.Add(row.Buttons.At(ButtonsX, 0));
             c.Add(row.Gap.At(PanelWidth - 6, 4));
-            Canvas.Children.Add(row.Host.At(0, Top + i * RowHeight));
+            Canvas.Children.Add(row.Host.At(0, Top));
             _rows.Add(row);
         }
         Canvas.Children.Add(_empty.At(0, Height / 2 - 10));

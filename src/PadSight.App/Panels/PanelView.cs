@@ -63,26 +63,52 @@ public sealed class OutlineText : FrameworkElement
     Brush _foreground = Draw.TextBrush;
     double _fontSize = 12;
     FontFamily _fontFamily = Draw.Ui;
+    // 文字の組み立ては重いので、文字・書体・大きさ・色が変わるまで使い回す。
+    // 縁取りを 1 回組んだ絵(DrawingGroup)にして 8 か所に置く形は、文字の端の濃さが変わった(最大 45/255)ので使わない
+    FormattedText? _halo, _body;
 
     public string Text
     {
         get => _runs is null ? _text : string.Concat(_runs.Select(r => r.Text));
-        set { if (_runs is null && _text == value) return; _text = value; _runs = null; InvalidateMeasure(); InvalidateVisual(); }
+        set { if (_runs is null && _text == value) return; _text = value; _runs = null; Changed(measure: true); }
     }
 
-    public Brush Foreground { get => _foreground; set { _foreground = value; InvalidateVisual(); } }
-    public double FontSize { get => _fontSize; set { _fontSize = value; InvalidateMeasure(); } }
-    public FontFamily FontFamily { get => _fontFamily; set { _fontFamily = value; InvalidateMeasure(); } }
+    public Brush Foreground { get => _foreground; set { if (ReferenceEquals(_foreground, value)) return; _foreground = value; _body = null; InvalidateVisual(); } }
+    public double FontSize { get => _fontSize; set { if (_fontSize == value) return; _fontSize = value; Changed(measure: true); } }
+    public FontFamily FontFamily { get => _fontFamily; set { if (ReferenceEquals(_fontFamily, value)) return; _fontFamily = value; Changed(measure: true); } }
     public TextAlignment TextAlignment { get; set; }
     public TextTrimming TextTrimming { get; set; }
 
-    /// <summary>色の違う文字を並べる(入力履歴のボタン)。</summary>
+    /// <summary>色の違う文字を並べる(入力履歴のボタン)。前と同じ並びなら何もしない。</summary>
     public void SetRuns(IEnumerable<(string Text, Brush Brush)> runs)
     {
-        _runs = [.. runs];
-        InvalidateMeasure();
+        List<(string Text, Brush Brush)> next = [.. runs];
+        if (_runs is not null && _runs.Count == next.Count)
+        {
+            bool same = true;
+            for (int i = 0; i < next.Count && same; i++)
+                same = _runs[i].Text == next[i].Text && ReferenceEquals(_runs[i].Brush, next[i].Brush);
+            if (same)
+                return;
+        }
+        _runs = next;
+        Changed(measure: true);
+    }
+
+    void Changed(bool measure)
+    {
+        _halo = _body = null;
+        if (measure) InvalidateMeasure();
         InvalidateVisual();
     }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        Changed(measure: true);
+        base.OnDpiChanged(oldDpi, newDpi);
+    }
+
+    FormattedText Halo() => _halo ??= Build(true);
 
     FormattedText Build(bool halo)
     {
@@ -104,9 +130,16 @@ public sealed class OutlineText : FrameworkElement
         return ft;
     }
 
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (e.Property == WidthProperty)
+            Changed(measure: false); // 折り返しの幅(MaxTextWidth)が変わる
+    }
+
     protected override Size MeasureOverride(Size availableSize)
     {
-        var ft = Build(true);
+        var ft = Halo();
         return new Size(double.IsNaN(Width) ? ft.WidthIncludingTrailingWhitespace + 2 : Width, ft.Height + 2);
     }
 
@@ -114,10 +147,11 @@ public sealed class OutlineText : FrameworkElement
     {
         if (Text.Length == 0)
             return;
-        var halo = Build(true);
+        // 縁取りは同じ文字を 8 回描く。字形(GlyphRun)をずらして描き直す形も試したが、こちらの方が速かった(2026-11-18)
+        var halo = Halo();
         foreach (var (x, y) in Offsets)
             dc.DrawText(halo, new Point(1 + x, 1 + y));
-        dc.DrawText(Build(false), new Point(1, 1));
+        dc.DrawText(_body ??= Build(false), new Point(1, 1));
     }
 }
 

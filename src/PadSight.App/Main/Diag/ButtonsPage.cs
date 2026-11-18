@@ -51,6 +51,7 @@ public sealed class ButtonsPage : IDiagPage
     PaddleMapper? _paddles;
     DiagContext? _last;
     string _setupKey = "", _coverageKey = "", _paddleKey = "", _chatterKey = "";
+    (object Chatter, object? Pad, string Style, Skin Skin)? _chatterSeen;
     bool _coverageComplete;
     List<(string Name, ChatterCount Count)> _chatterRows = [];
 
@@ -369,6 +370,12 @@ public sealed class ButtonsPage : IDiagPage
     /// <summary>選んだパッドの押したことのあるボタンだけ。数が変わったときだけ作り直す。</summary>
     void RenderChatter(DiagContext c)
     {
+        // 数の写しは変わったときだけ作り直される(ChatterCounter.Snapshot)。同じ写し・同じパッド・同じ表記なら見分けの文字列も作らない
+        var settingsNow = App.Current.Settings;
+        var seen = ((object)c.S.Chatter, (object?)c.Pad, settingsNow.LabelStyle, Labels.ChooseSkin(c.Pad, c.Pad is null ? null : settingsNow.Devices.GetValueOrDefault(c.Pad.Guid)));
+        if (seen == _chatterSeen)
+            return;
+        _chatterSeen = seen;
         var rows = new List<(string Name, ChatterCount Count)>();
         if (c.Pad is { } pad && c.S.Chatter.TryGetValue(pad.InstanceId, out var counts))
         {
