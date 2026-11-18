@@ -22,6 +22,8 @@ public sealed class PanelManager
     readonly List<Entry> _entries = [];
     long _lastVersion = -1;
     bool _placed;
+    readonly IdleFade _idle = new();
+    double _fade = 1; // FR-61: 不透明度に掛ける値
 
     public PanelManager(Func<Settings> settings, Action save)
     {
@@ -143,7 +145,7 @@ public sealed class PanelManager
             }
         }
         e.Window.PanelScale = p.Scale / 100.0;
-        e.Window.Opacity = p.Opacity / 100.0;
+        e.Window.Opacity = p.Opacity / 100.0 * _fade;
         e.Window.BackgroundOpacity = p.BackgroundOpacity / 100.0;
         Draw.ApplyTheme(s);
         e.Window.BackgroundColor = Draw.Palette.Background;
@@ -291,6 +293,13 @@ public sealed class PanelManager
         _lastVersion = s.Version;
         var settings = _settings();
         Draw.ApplyTheme(settings); // 配色テーマが変わっていれば色を入れ替える(FR-39)
+        double fade = _idle.Factor(s, nowNs, Arranging ? 0 : settings.IdleFadeSeconds, settings.Deadzone);
+        if (fade != _fade)
+        {
+            _fade = fade;
+            foreach (var e in _entries)
+                e.Window.Opacity = settings.Panels[e.Name].Opacity / 100.0 * fade;
+        }
         foreach (var e in _entries)
         {
             if (e.Window.IsVisible && (changed || e.View.Animating(s)))

@@ -75,6 +75,19 @@ public sealed class Settings
     public bool InputHidapiSwitch { get; set; } = true;
     /// <summary>FR-44: 起動したときに新しい版を確かめる。</summary>
     public bool UpdateCheckOnStart { get; set; } = true;
+    /// <summary>FR-61: 触らない間はパネルを薄くするまでの秒数。0 は切。</summary>
+    public int IdleFadeSeconds { get; set; }
+    public static readonly int[] IdleFadeChoices = [0, 5, 10, 30];
+    /// <summary>FR-62: 名前の順で 1〜4 番目のプロファイルを当てるホットキー。</summary>
+    public string?[] HotkeyProfiles { get; set; } = ["Ctrl+Alt+1", "Ctrl+Alt+2", "Ctrl+Alt+3", "Ctrl+Alt+4"];
+    /// <summary>FR-64: 電池が少ないとトレイで知らせる。</summary>
+    public bool BatteryLowNotify { get; set; } = true;
+
+    /// <summary>同じ組み合わせを 2 つの操作に入れないための、全部のホットキー。</summary>
+    public string?[] AllHotkeys => [HotkeyToggle, HotkeyArrange, HotkeyClearHistory, HotkeyPauseHistory, .. HotkeyProfiles];
+
+    /// <summary>プロファイルの並び(一覧とホットキーの番号は、この順)。</summary>
+    public List<string> ProfileOrder => Profiles.Keys.OrderBy(n => n, StringComparer.CurrentCulture).ToList();
 
     /// <summary>FR-42: 名前 → { overlay, history_rows, stats_rows }。値は当てるときに Parse で確かめる。</summary>
     public Dictionary<string, JsonObject> Profiles { get; set; } = [];
@@ -129,6 +142,7 @@ public sealed class Settings
         s.CustomBackground = r.Str("overlay.custom_colors.background", s.CustomBackground, IsColor);
         s.CustomLine = r.Str("overlay.custom_colors.line", s.CustomLine, IsColor);
         s.CustomText = r.Str("overlay.custom_colors.text", s.CustomText, IsColor);
+        s.IdleFadeSeconds = r.Int("overlay.idle_fade_seconds", 0, 30, 0, allowed: IdleFadeChoices);
         foreach (var n in PanelNames)
         {
             var p = s.Panels[n];
@@ -189,6 +203,9 @@ public sealed class Settings
         s.HotkeyArrange = r.Hotkey("hotkeys.arrange", s.HotkeyArrange);
         s.HotkeyClearHistory = r.Hotkey("hotkeys.clear_history", s.HotkeyClearHistory);
         s.HotkeyPauseHistory = r.Hotkey("hotkeys.pause_history", s.HotkeyPauseHistory);
+        for (int i = 0; i < s.HotkeyProfiles.Length; i++)
+            s.HotkeyProfiles[i] = r.Hotkey($"hotkeys.profile_{i + 1}", s.HotkeyProfiles[i]);
+        s.BatteryLowNotify = r.Bool("notify.battery_low", true);
         s.InputWgi = r.Choice("input.wgi", ["default", "on", "off"], s.InputWgi);
         s.InputHidapiPlayStation = r.Bool("input.hidapi_playstation", true);
         s.InputHidapiSwitch = r.Bool("input.hidapi_switch", true);
@@ -234,7 +251,7 @@ public sealed class Settings
             ["overlay"] = new JsonObject
             {
                 ["visible_on_start"] = VisibleOnStart, ["pressed_color"] = PressedColor, ["label_style"] = LabelStyle,
-                ["panel_theme"] = PanelTheme,
+                ["panel_theme"] = PanelTheme, ["idle_fade_seconds"] = IdleFadeSeconds,
                 ["custom_colors"] = new JsonObject { ["background"] = CustomBackground, ["line"] = CustomLine, ["text"] = CustomText },
                 ["panels"] = panels,
             },
@@ -259,7 +276,12 @@ public sealed class Settings
                 ["rows"] = new JsonArray([.. StatsRows.Select(x => (JsonNode)x)]),
             },
             ["export"] = new JsonObject { ["grindlog_game"] = GrindLogGame, ["grindlog_type"] = GrindLogType },
-            ["hotkeys"] = new JsonObject { ["toggle"] = HotkeyToggle, ["arrange"] = HotkeyArrange, ["clear_history"] = HotkeyClearHistory, ["pause_history"] = HotkeyPauseHistory },
+            ["hotkeys"] = new JsonObject
+            {
+                ["toggle"] = HotkeyToggle, ["arrange"] = HotkeyArrange, ["clear_history"] = HotkeyClearHistory, ["pause_history"] = HotkeyPauseHistory,
+                ["profile_1"] = HotkeyProfiles[0], ["profile_2"] = HotkeyProfiles[1], ["profile_3"] = HotkeyProfiles[2], ["profile_4"] = HotkeyProfiles[3],
+            },
+            ["notify"] = new JsonObject { ["battery_low"] = BatteryLowNotify },
             ["input"] = new JsonObject { ["wgi"] = InputWgi, ["hidapi_playstation"] = InputHidapiPlayStation, ["hidapi_switch"] = InputHidapiSwitch },
             ["update"] = new JsonObject { ["check_on_start"] = UpdateCheckOnStart },
             ["profiles"] = new JsonObject(Profiles.Select(kv => KeyValuePair.Create(kv.Key, (JsonNode?)kv.Value.DeepClone()))),

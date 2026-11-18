@@ -118,6 +118,9 @@ public sealed class PanelsTab : UserControl
         };
         _refreshEasy();
         stack.Children.Add(Ui.Horizontal(easy, easyNote));
+        // FR-61: 触らない間はパネルを薄くする
+        stack.Children.Add(Row("触らない間は薄く", Narrow(Ui.Combo([("0", "しない"), ("5", "5 秒で"), ("10", "10 秒で"), ("30", "30 秒で")],
+            s.IdleFadeSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture), v => { s.IdleFadeSeconds = int.Parse(v, System.Globalization.CultureInfo.InvariantCulture); Changed(); }))));
         var look = new StackPanel();
         stack = look;
         stack.Children.Add(Ui.Check("表示する", p.Visible, v => { p.Visible = v; Changed(); }));
@@ -154,7 +157,7 @@ public sealed class PanelsTab : UserControl
     {
         var s = App.Current.Settings;
         var stack = new StackPanel();
-        var names = s.Profiles.Keys.OrderBy(n => n, StringComparer.CurrentCulture).ToList();
+        var names = s.ProfileOrder;
         if (names.Count == 0)
             stack.Children.Add(Row("プロファイル", Ui.Weak("まだありません")));
         else
@@ -162,13 +165,13 @@ public sealed class PanelsTab : UserControl
             if (_profileChoice is null || !names.Contains(_profileChoice))
                 _profileChoice = names[0];
             stack.Children.Add(Row("プロファイル", Ui.Horizontal(
-                Narrow(Ui.Combo([.. names.Select(n => (n, n))], _profileChoice, v => _profileChoice = v)),
+                // FR-62: 1〜4 番目にはホットキーを添える
+                Narrow(Ui.Combo([.. names.Select((n, i) => (n, i < s.HotkeyProfiles.Length && s.HotkeyProfiles[i] is { } k ? $"{n}({k})" : n))], _profileChoice, v => _profileChoice = v)),
                 Ui.Button("当てる", () =>
                 {
                     string name = _profileChoice!;
-                    App.Current.ReplaceSettings(s.WithProfile(name, out var reset));
-                    foreach (var key in reset)
-                        AppLog.Write("プロファイルの値を既定に戻した: " + key);
+                    App.Current.ApplyProfile(name);
+                    _generation = App.Current.SettingsGeneration; // 下の Build で作り直すので、Render ではもう作り直さない
                     _profileNote = $"『{name}』を当てました";
                     Build();
                 }),
@@ -179,6 +182,7 @@ public sealed class PanelsTab : UserControl
                         return;
                     s.Profiles.Remove(name);
                     App.Current.SaveSettings();
+                    App.Current.RegisterHotkeys(); // 番号がずれるので登録し直す(FR-62)
                     _profileNote = $"『{name}』を消しました";
                     Build();
                 }))));
@@ -196,6 +200,7 @@ public sealed class PanelsTab : UserControl
             else if (s.SaveProfile(name))
             {
                 App.Current.SaveSettings();
+                App.Current.RegisterHotkeys(); // FR-62
                 _profileChoice = name;
                 _profileNote = $"『{name}』を保存しました";
             }
@@ -353,8 +358,15 @@ public sealed class PanelsTab : UserControl
         }
     }
 
+    int _generation = App.Current.SettingsGeneration;
+
     public void Render(PadSnapshot s, ulong nowNs)
     {
+        if (_generation != App.Current.SettingsGeneration)
+        {
+            _generation = App.Current.SettingsGeneration; // ホットキーでプロファイルを当てた・写しから戻した(FR-62)
+            Build();
+        }
         var view = _previews[Selected];
         if (s.Version == _lastVersion && !_dirty && !view.Animating(s))
             return;

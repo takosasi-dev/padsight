@@ -30,7 +30,9 @@ The user interface is in Japanese only.
 - Panels let clicks through to the window below and never take focus. Hotkeys hide all panels, enter the arrange mode, clear the history and pause the history (defaults Ctrl+Alt+G / J / H / F)
 - Panels can be dragged, or rearranged in one click to the corners or stacked on the left or right
 - Panel color themes: Classic, Neon, Light, High contrast, and a custom theme with your own background, line and text colors
-- Save the panel layout, colors and shown rows as named profiles and switch between them by hand
+- Save the panel layout, colors and shown rows as named profiles and switch between them by hand. The first four (by name) also switch with hotkeys (defaults Ctrl+Alt+1 to 4)
+- Panels can fade while you are not touching the pad (after 5, 10 or 30 seconds; they come back as soon as you touch it; off by default)
+- A tray notification tells you when a wireless pad's battery drops below 20% and 10% (can be turned off)
 - A demo mode plays a fixed input pattern so you can see the panels move without a pad (demo input is not counted in the stats)
 - A button in Settings downloads the public controller mapping list (SDL_GameControllerDB) so unknown pads and arcade sticks show proper button names
 - At startup PadSight tells you when a newer version has been published (can be turned off; it never downloads or replaces itself)

@@ -189,6 +189,8 @@ public sealed class SdlInputThread
             while (_commands.TryDequeue(out var cmd))
             {
                 cmd(_engine);
+                if (_demoEngine is not null)
+                    cmd(_demoEngine); // デモの表示にも効かせる(履歴を消す・数え直す・区切る。設定は StepDemo が DemoConfig で当て直す)
                 dirty = true;
             }
             switch (Interlocked.Exchange(ref _demoRequest, -1))

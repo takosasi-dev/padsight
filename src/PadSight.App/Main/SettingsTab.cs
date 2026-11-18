@@ -43,6 +43,16 @@ public sealed class SettingsTab : UserControl
         HotkeyRow("配置を直す", App.HotkeyArrange, () => s.HotkeyArrange, v => s.HotkeyArrange = v);
         HotkeyRow("入力履歴を消す", App.HotkeyClear, () => s.HotkeyClearHistory, v => s.HotkeyClearHistory = v);
         HotkeyRow("入力履歴を止める", App.HotkeyPause, () => s.HotkeyPauseHistory, v => s.HotkeyPauseHistory = v); // FR-48
+        // FR-62: 名前の順で 1〜4 番目のプロファイル
+        for (int i = 0; i < s.HotkeyProfiles.Length; i++)
+        {
+            int n = i;
+            HotkeyRow($"プロファイル {n + 1} を当てる", App.HotkeyProfile1 + n, () => s.HotkeyProfiles[n], v => s.HotkeyProfiles[n] = v);
+        }
+        _cur.Children.Add(Ui.Weak("プロファイルは、パネルのタブの一覧と同じ名前の順で 1〜4 番です"));
+
+        Group("知らせ");
+        _cur.Children.Add(Ui.Check("ワイヤレスのパッドの電池が 20%・10% を切ったら知らせる", s.BatteryLowNotify, v => { s.BatteryLowNotify = v; app.SaveSettings(); })); // FR-64
 
         Group("起動");
         _cur.Children.Add(Ui.Check("ログオン時に起動する", AutoStart.IsEnabled(), AutoStart.Set));
@@ -171,7 +181,7 @@ public sealed class SettingsTab : UserControl
             _onCaptured = combo =>
             {
                 var s = app.Settings;
-                var used = new[] { s.HotkeyToggle, s.HotkeyArrange, s.HotkeyClearHistory, s.HotkeyPauseHistory };
+                var used = s.AllHotkeys;
                 if (combo is not null && combo != get() && used.Contains(combo))
                 {
                     MessageBox.Show(Window.GetWindow(this), $"{combo} はほかの操作で使っています。別の組み合わせを選んでください", "PadSight");

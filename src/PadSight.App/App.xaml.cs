@@ -20,6 +20,8 @@ public sealed record Banner(string Key, string Text, string Kind, string? Action
 public partial class App : Application
 {
     public const int HotkeyToggle = 1, HotkeyArrange = 2, HotkeyClear = 3, HotkeyPause = 4;
+    /// <summary>FR-62: プロファイル 1〜4 のホットキーの番号は HotkeyProfile1 + 0〜3。</summary>
+    public const int HotkeyProfile1 = 11;
 
     public static string DataDir { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PadSight");
     public static string Version { get; } = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
@@ -37,6 +39,10 @@ public partial class App : Application
     bool _renderHooked, _quitting;
     System.Windows.Threading.DispatcherTimer? _statusTimer;
     readonly DriftWatch _drift = new();
+    readonly BatteryWatch _battery = new();
+
+    /// <summary>設定を中身ごと入れ替えた回数。開いている画面は、これが変わったら作り直す(ホットキーでプロファイルを当てたときなど)。</summary>
+    public int SettingsGeneration { get; private set; }
 
     public Settings Settings { get; private set; } = new();
     public SessionStore Sessions { get; private set; } = null!;
@@ -181,6 +187,15 @@ public partial class App : Application
         Panels.ApplyAll();
         ApplyTheme();
         RegisterHotkeys();
+        SettingsGeneration++;
+    }
+
+    /// <summary>FR-42・FR-62: プロファイルを当てる(パネルのタブの「当てる」とホットキー)。</summary>
+    public void ApplyProfile(string name)
+    {
+        ReplaceSettings(Settings.WithProfile(name, out var reset));
+        foreach (var key in reset)
+            AppLog.Write("プロファイルの値を既定に戻した: " + key);
     }
 
     /// <summary>入力の取り方を変えてつなぎ直す(FR-8)。</summary>
@@ -264,13 +279,20 @@ public partial class App : Application
     /// <summary>4 つのホットキーを登録し直す。失敗しても別の組み合わせへ振り替えない(§9.11)。</summary>
     public void RegisterHotkeys()
     {
-        foreach (var (id, combo) in new[] { (HotkeyToggle, Settings.HotkeyToggle), (HotkeyArrange, Settings.HotkeyArrange), (HotkeyClear, Settings.HotkeyClearHistory), (HotkeyPause, Settings.HotkeyPauseHistory) })
+        int profiles = Settings.Profiles.Count;
+        foreach (var (id, combo) in HotkeyList())
         {
             ClearBanner("hotkey" + id);
             if (combo is null)
             {
                 _hotkeys.Unregister(id);
                 HotkeyStatus[id] = "使っていません";
+                continue;
+            }
+            if (id >= HotkeyProfile1 && id - HotkeyProfile1 >= profiles)
+            {
+                _hotkeys.Unregister(id); // FR-62: その番号のプロファイルが無ければ登録しない(他のアプリのキーを無駄に取らない)
+                HotkeyStatus[id] = "プロファイルがありません";
                 continue;
             }
             bool ok = _hotkeys.Register(id, combo);
@@ -285,9 +307,13 @@ public partial class App : Application
         }
     }
 
+    IEnumerable<(int Id, string? Combo)> HotkeyList() =>
+        [(HotkeyToggle, Settings.HotkeyToggle), (HotkeyArrange, Settings.HotkeyArrange), (HotkeyClear, Settings.HotkeyClearHistory), (HotkeyPause, Settings.HotkeyPauseHistory),
+         .. Settings.HotkeyProfiles.Select((c, i) => (HotkeyProfile1 + i, c))];
+
     public void UnregisterHotkeys()
     {
-        foreach (var id in new[] { HotkeyToggle, HotkeyArrange, HotkeyClear, HotkeyPause })
+        foreach (var (id, _) in HotkeyList())
             _hotkeys.Unregister(id);
     }
 
@@ -299,6 +325,15 @@ public partial class App : Application
             case HotkeyArrange: Panels.SetArranging(!Panels.Arranging); break;
             case HotkeyClear: ClearHistory(); break;
             case HotkeyPause: TogglePauseHistory(); break;
+            case >= HotkeyProfile1 and < HotkeyProfile1 + 4:
+                var order = Settings.ProfileOrder;
+                int n = id - HotkeyProfile1;
+                if (n < order.Count)
+                {
+                    ApplyProfile(order[n]);
+                    AppLog.Write($"ホットキーでプロファイル {n + 1} を当てた"); // 名前は利用者が付けた物なので書かない
+                }
+                break;
         }
     }
 
@@ -413,7 +448,24 @@ public partial class App : Application
         else ClearBanner("dup");
         // デモの間と、止めた直後にまだデモのスナップショットが残っている間は見ない(本物のパッドを「外れた」と忘れないように)
         if (!DemoRunning && !s.Pads.Any(p => p.InstanceId == DemoScript.Id))
+        {
             WatchDrift(s);
+            WatchBattery(s);
+        }
+    }
+
+    /// <summary>FR-64: 電池が 20%・10% を切ったらトレイで 1 回ずつ知らせる。</summary>
+    void WatchBattery(PadSnapshot s)
+    {
+        var tell = _battery.Feed(s.Power);
+        if (!Settings.BatteryLowNotify)
+            return;
+        foreach (var (id, percent) in tell)
+        {
+            string name = s.Pads.FirstOrDefault(p => p.InstanceId == id)?.Name ?? "パッド";
+            _tray.ShowNotification("PadSight", $"{name} の電池が残り {percent}% です");
+            AppLog.Write($"電池の知らせを出した({percent}%)");
+        }
     }
 
     /// <summary>FR-52: 割り当てのあるパッドのスティックのずれを裏で見張り、触っていない間の平均がデッドゾーンを超えていたら帯で 1 回知らせる。</summary>
