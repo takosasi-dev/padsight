@@ -139,7 +139,7 @@ public sealed class MeasureTab : UserControl
             _bigSub.Text = "「始める」を押すと、3 秒数えてから始まります"; // 待ちの状態を文字でも出す(画面設計書 §6。2026-11-18)
         }
         ((ScaleTransform)_barFill.RenderTransform).ScaleX = 0;
-        SetSquare(go: false, "「始める」を押すと始まります");
+        SetSquare(go: false, "すぐ上の「始める」で反応速度を測ります"); // 連打テストの「始める」と取り違えないように(2026-11-18)
         _squareText.FontSize = 16; // 待ちの案内は小さく。測っている間の文字(SetSquare の呼び先)は 30 に戻す
         _squareText.FontWeight = FontWeights.Normal;
         _reactStatus.Text = "";

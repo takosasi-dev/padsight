@@ -123,7 +123,8 @@ public sealed class PanelsTab : UserControl
             s.IdleFadeSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture), v => { s.IdleFadeSeconds = int.Parse(v, System.Globalization.CultureInfo.InvariantCulture); Changed(); }))));
         var look = new StackPanel();
         stack = look;
-        stack.Children.Add(Ui.Check("表示する", p.Visible, v => { p.Visible = v; Changed(); }));
+        // 作り直して、位置の欄を出した・隠した状態に合わせる(作り直さないと「パネルを出すと変えられます」が残った。2026-11-18)
+        stack.Children.Add(Ui.Check("表示する", p.Visible, v => { p.Visible = v; Changed(); Build(); }));
         stack.Children.Add(Slider("大きさ(%)", 50, 300, 10, p.Scale, "0", v => { p.Scale = (int)v; Changed(); }));
         stack.Children.Add(Slider("不透明度(%)", 20, 100, 1, p.Opacity, "0", v => { p.Opacity = (int)v; Changed(); }));
         stack.Children.Add(Slider("背景の濃さ(%)", 0, 100, 1, p.BackgroundOpacity, "0", v => { p.BackgroundOpacity = (int)v; Changed(); }));
