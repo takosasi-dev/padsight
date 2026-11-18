@@ -102,6 +102,8 @@ public sealed class DiagnosticsTab : UserControl
         static TextBlock Label(string text, double left) { var t = Ui.Text(text); t.Margin = new Thickness(left, 0, 8, 0); t.VerticalAlignment = VerticalAlignment.Center; return t; }
         _pad.Margin = _profile.Margin = new Thickness(0, 2, 0, 2);
         _info.Margin = new Thickness(0, 8, 0, 0);
+        // 断り書きは指を置いたときに出す(帯を 1 行にして、下のページを広く見せる。2026-11-18)
+        _info.ToolTip = "報告の間隔は SDL が受け取った間隔の参考値です。パッドの実際の報告の間隔と同じとは限りません";
         var header = Ui.Card(null,
             Ui.Horizontal(Label("パッド", 0), _pad, Label("機種", 24), _profile),
             _info);
@@ -252,7 +254,9 @@ public sealed class DiagnosticsTab : UserControl
             "NoBattery" => "電池なし(有線)",
             _ => "電池は不明",
         } : "電池は不明";
-        return $"{p.TypeName}  ・  {conn}  ・  {ids}  ・  {power}  ・  報告の間隔 {rate}"
-            + "\n報告の間隔は SDL が受け取った間隔の参考値です。パッドの実際の報告の間隔と同じとは限りません";
+        // 種類はホームの表と同じ呼び名にし、SDL の細かい型(XBOXONE など)は括弧で添える(2026-11-18。別のパッドに見えないように)
+        string kind = HomeTab.KindName(p.Kind);
+        string type = string.IsNullOrEmpty(p.TypeName) || string.Equals(p.TypeName, kind, StringComparison.OrdinalIgnoreCase) ? kind : $"{kind}({p.TypeName})";
+        return $"{type}  ・  {conn}  ・  {ids}  ・  {power}  ・  報告の間隔 {rate}";
     }
 }

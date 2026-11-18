@@ -110,7 +110,9 @@ public sealed class StatsTab : UserControl
         _padEmptyBox = Ui.Empty(_padEmpty);
         // 選んだパッドの絵は表の下に置く(§4.8「表の右、幅が足りなければ下」。表がほぼ全幅なので、いつも下になる)
         var pads = Ui.Card("パッドごとの通算", _padList, _padEmptyBox, _heatPanel);
-        Content = Ui.Page(bar, _exportNote, Ui.Horizontal(_done, _openFolder), tiles, sessions, chart, pads);
+        Ui.SetText(_live, "");
+        _live.Margin = new Thickness(0, 0, 0, 10);
+        Content = Ui.Page(bar, _exportNote, Ui.Horizontal(_done, _openFolder), tiles, _live, sessions, chart, pads);
         App.Current.Sessions.Appended += () => Dispatcher.BeginInvoke(Reload);
     }
 
@@ -165,7 +167,19 @@ public sealed class StatsTab : UserControl
         }
     }
 
-    public void Render(PadSnapshot s) => _split.IsEnabled = s.SessionActive;
+    /// <summary>進行中のセッションは、確定するまで上の合計と表に入らない。記録されていないように見えたので、合計の下に 1 行出す(2026-11-18)。</summary>
+    public void Render(PadSnapshot s, ulong nowNs)
+    {
+        _split.IsEnabled = s.SessionActive;
+        var v = s.Session;
+        string text = !v.Active ? ""
+            : $"進行中のセッション {PadSight.App.Panels.StatsView.Duration(TimeSpan.FromSeconds((nowNs - Math.Min(nowNs, v.StartNs)) / (double)Values.NsPerSecond))}"
+              + $"・入力 {v.Inputs.ToString("N0", CultureInfo.InvariantCulture)}(終わるか区切ると、上の合計と表に入ります)";
+        if (_live.Text != text)
+            Ui.SetText(_live, text);
+    }
+
+    readonly TextBlock _live = Ui.Weak();
 
     /// <summary>FR-38: パッドごとの通算を、入力の多い順に出す。期間には関係なく全部。</summary>
     void RefreshPads()

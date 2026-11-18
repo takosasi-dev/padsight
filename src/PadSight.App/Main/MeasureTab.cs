@@ -67,8 +67,8 @@ public sealed class MeasureTab : UserControl
 
         var react = new StackPanel();
         react.Children.Add(Ui.Text("四角の色が変わったら、どれかのボタンをすぐ押してください。5 回測ります"));
+        react.Children.Add(Ui.Horizontal(_reactBtn, _reactStatus)); // 「始める」は連打テストと同じく説明のすぐ下
         react.Children.Add(_square);
-        react.Children.Add(Ui.Horizontal(_reactBtn, _reactStatus));
         react.Children.Add(_rounds);
         react.Children.Add(_reactResult);
         react.Children.Add(Ui.Weak("画面に出るまでの遅れ(数十ミリ秒)を含みます"));
@@ -136,16 +136,20 @@ public sealed class MeasureTab : UserControl
         if (_presses.Count == 0 && _rapidResult.Text == "")
         {
             _big.Text = "—";
-            _bigSub.Text = "";
+            _bigSub.Text = "「始める」を押すと、3 秒数えてから始まります"; // 待ちの状態を文字でも出す(画面設計書 §6。2026-11-18)
         }
         ((ScaleTransform)_barFill.RenderTransform).ScaleX = 0;
-        SetSquare(go: false, "");
+        SetSquare(go: false, "「始める」を押すと始まります");
+        _squareText.FontSize = 16; // 待ちの案内は小さく。測っている間の文字(SetSquare の呼び先)は 30 に戻す
+        _squareText.FontWeight = FontWeights.Normal;
         _reactStatus.Text = "";
     }
 
     void SetSquare(bool go, string text)
     {
         _squareText.Text = text;
+        _squareText.FontSize = 30;
+        _squareText.FontWeight = FontWeights.Bold;
         if (go)
         {
             // 押したときの色にして、線も太くする(色だけで示さない。画面設計書 §6)

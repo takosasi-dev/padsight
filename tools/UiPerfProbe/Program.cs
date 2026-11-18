@@ -47,7 +47,7 @@ var th = new Thread(() =>
             new("panel:stats", () => new StatsView(), PanelRender),
             new("tab:home", () => new HomeTab(), (e, s, n) => { ((HomeTab)e).Render(s, n, true); return true; }),
             new("tab:panels", () => new PanelsTab(), (e, s, n) => { ((PanelsTab)e).Render(s, n); return true; }),
-            new("tab:stats", () => new StatsTab(), (e, s, n) => { ((StatsTab)e).Render(s); return true; }),
+            new("tab:stats", () => new StatsTab(), (e, s, n) => { ((StatsTab)e).Render(s, n); return true; }),
             new("tab:measure", () => new MeasureTab(), (e, s, n) => { ((MeasureTab)e).Render(s, n); return true; }),
         };
         // 縁取り文字 1 個を毎フレーム違う数に書き換える(文字 1 個の書き換えの値段)

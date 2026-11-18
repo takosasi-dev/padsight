@@ -73,7 +73,10 @@ public sealed class PanelsTab : UserControl
         App.Current.Panels.ApplyAll();
         App.Current.SaveSettings();
         _dirty = true;
+        _refreshEasy?.Invoke();
     }
+
+    Action? _refreshEasy;
 
     void Build()
     {
@@ -85,7 +88,7 @@ public sealed class PanelsTab : UserControl
         var stack = common;
         stack.Children.Add(ProfileRows());
         // FR-39: 4 枚に共通の配色テーマ。選ぶと押したときの色もおすすめの色にする
-        stack.Children.Add(Row("パネルの配色(4 枚共通)", Ui.Combo(PanelTheme.Choices, s.PanelTheme, v =>
+        stack.Children.Add(Row("パネルの配色", Ui.Combo(PanelTheme.Choices, s.PanelTheme, v =>
         {
             s.PanelTheme = v;
             if (PanelTheme.RecommendedPressed(v) is { } pressed)
@@ -99,12 +102,22 @@ public sealed class PanelsTab : UserControl
             stack.Children.Add(ColorRow("線の色", s.CustomLine, v => s.CustomLine = v));
             stack.Children.Add(ColorRow("文字の色", s.CustomText, v => s.CustomText = v));
         }
-        stack.Children.Add(Ui.Horizontal(Ui.Button("4 枚とも見やすくする(不透明度 100%・背景 85%)", () =>
+        var easy = Ui.Button("4 枚とも見やすくする(不透明度 100%・背景 85%)", () =>
         {
             foreach (var ps in s.Panels.Values) { ps.Opacity = 100; ps.BackgroundOpacity = 85; }
             Changed();
             Build();
-        })));
+        });
+        // 押しても何も変わらないときは押せなくし、そう書く(2026-11-18)。つまみを動かしたら Changed で合わせ直す
+        var easyNote = Ui.Weak("4 枚とも、もうこの値です");
+        _refreshEasy = () =>
+        {
+            bool already = s.Panels.Values.All(ps => ps.Opacity == 100 && ps.BackgroundOpacity == 85);
+            easy.IsEnabled = !already;
+            easyNote.Visibility = already ? Visibility.Visible : Visibility.Collapsed;
+        };
+        _refreshEasy();
+        stack.Children.Add(Ui.Horizontal(easy, easyNote));
         var look = new StackPanel();
         stack = look;
         stack.Children.Add(Ui.Check("表示する", p.Visible, v => { p.Visible = v; Changed(); }));
@@ -124,7 +137,8 @@ public sealed class PanelsTab : UserControl
         }
         string title = App.Current.Panels.Entries.FirstOrDefault(e => e.Name == name)?.Title ?? "";
         var page = new StackPanel();
-        page.Children.Add(Ui.Card(null, common));
+        // 見出しが無いと、左で選んだパネルだけの設定に見えた(2026-11-18)
+        page.Children.Add(Ui.Card("4 枚に共通", common));
         page.Children.Add(Ui.Card(title, look));
         page.Children.Add(Ui.Card("このパネルの設定", own));
         _settingsHost.Content = page;
@@ -217,9 +231,14 @@ public sealed class PanelsTab : UserControl
     static UIElement PositionRow(string name)
     {
         var pos = App.Current.Panels.Position(name);
-        var x = new TextBox { Width = 70, Text = pos?.X.ToString(CultureInfo.InvariantCulture) ?? "", IsEnabled = pos is not null };
-        var y = new TextBox { Width = 70, Text = pos?.Y.ToString(CultureInfo.InvariantCulture) ?? "", IsEnabled = pos is not null, Margin = new Thickness(8, 0, 0, 0) };
-        var note = Ui.Weak(pos is null ? "パネルを出しているときに変えられます" : "画面の左上からの位置(Enter で動かす)");
+        // 出ていない間は、覚えている位置を(変えられない欄で)見せる。空の欄だと今どこにあるのか分からなかった(2026-11-18)
+        var saved = App.Current.Settings.Panels[name];
+        string Show(double? v) => v is double d ? Math.Round(d).ToString(CultureInfo.InvariantCulture) : "";
+        var x = new TextBox { Width = 70, Text = pos is { } p0 ? Show(p0.X) : Show(saved.X), IsEnabled = pos is not null };
+        var y = new TextBox { Width = 70, Text = pos is { } p1 ? Show(p1.Y) : Show(saved.Y), IsEnabled = pos is not null, Margin = new Thickness(8, 0, 0, 0) };
+        var note = Ui.Weak(pos is not null ? "画面の左上からの位置(Enter で動かす)"
+            : saved.X is null ? "既定の位置(パネルを出すと変えられます)"
+            : "覚えている位置(パネルを出すと変えられます)");
         note.Margin = new Thickness(8, 0, 0, 0);
         void Apply()
         {

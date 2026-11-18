@@ -249,7 +249,7 @@ public sealed class TriggerPage : IDiagPage
         _lanes[1].Name.Text = rt;
         _leftRange.Name.Text = $"左({lt})";
         _rightRange.Name.Text = $"右({rt})";
-        _threshold.Text = $"点線は、押したとみなす値({(settings.TriggerThreshold * 100).ToString("0", Inv)}%。設定の「トリガーのしきい値」)です。線が点線を越えると、入力履歴にトリガーが出ます";
+        _threshold.Text = $"点線は、押したとみなす値({(settings.TriggerThreshold * 100).ToString("0", Inv)}%)です。線が点線を越えると、入力履歴にトリガーが出ます。値は「パネル」タブの「パッド表示」にある「トリガーを押したとみなす値」で変えられます";
         if (_w >= 0) Layout();
     }
 

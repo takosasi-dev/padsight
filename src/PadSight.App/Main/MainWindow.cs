@@ -130,7 +130,7 @@ public sealed class MainWindow : Window
             case TabItem { Content: HomeTab h }: h.Render(s, nowNs, IsActive); break;
             case TabItem { Content: PanelsTab p }: p.Render(s, nowNs); break;
             case TabItem { Content: DiagnosticsTab d }: d.Render(s, nowNs); break;
-            case TabItem { Content: StatsTab st }: st.Render(s); break;
+            case TabItem { Content: StatsTab st }: st.Render(s, nowNs); break;
             case TabItem { Content: MeasureTab m }: m.Render(s, nowNs); break;
         }
         if (_tabs.SelectedItem is not TabItem { Content: HomeTab })

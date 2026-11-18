@@ -48,13 +48,15 @@ public sealed class HomeTab : UserControl
     {
         _toggle = Ui.Primary("パネルを隠す", () => App.Current.Panels.Toggle());
         _arrange = Ui.Button("配置を直す", () => App.Current.Panels.SetArranging(!App.Current.Panels.Arranging));
-        _check = Ui.Button("裏の入力を確かめる", StartCheck);
+        // 「裏」だけでは何のことか分からなかったので、ゲーム中を言葉にした(2026-11-18)
+        _check = Ui.Button("ゲーム中も入力が届くか確かめる", StartCheck);
         _checkText.Margin = new Thickness(4, 4, 0, 4);
 
         var grid = new GridView();
         grid.Columns.Add(Ui.Column("パッド", nameof(PadRow.Name), 270));
         grid.Columns.Add(Ui.Column("種類", nameof(PadRow.Kind), 110));
-        grid.Columns.Add(Ui.Column("表示", nameof(PadRow.Shown), 80));
+        // 「表示 / 表示中」は右上の「パネル: 隠しています」と食い違って見えたので、どのパッドをパネルに出すかの欄だと分かる名前にした
+        grid.Columns.Add(Ui.Column("パネルに出す", nameof(PadRow.Shown), 110));
         grid.Columns.Add(Ui.Column("スキン", nameof(PadRow.Skin), 180));
         _list.View = grid;
         _emptyBox = Ui.Empty(_empty);
@@ -170,7 +172,7 @@ public sealed class HomeTab : UserControl
             {
                 var skin = Labels.ChooseSkin(p, settings.Devices.GetValueOrDefault(p.Guid));
                 string manual = settings.Devices.GetValueOrDefault(p.Guid) ?? "auto";
-                return new PadRow(p.Name, KindName(p.Kind), p.InstanceId == s.Pad?.InstanceId ? "表示中" : "—",
+                return new PadRow(p.Name, KindName(p.Kind), p.InstanceId == s.Pad?.InstanceId ? "このパッド" : "—",
                     manual == "auto" ? $"自動({SkinName(skin)})" : SkinName(skin), p.Guid, p.InstanceId);
             }).ToList();
             // 0 台のときは、空の表の代わりに案内を出す(§4.5「一覧の場所に」)

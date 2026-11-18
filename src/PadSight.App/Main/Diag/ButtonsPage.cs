@@ -195,7 +195,7 @@ public sealed class ButtonsPage : IDiagPage
         _coverageBody.Visibility = Visibility.Visible;
         _coverageEmpty.Visibility = Visibility.Collapsed;
         Ui.SetText(_triggerNote, profile.Buttons.Any(b => b.Key.EndsWith("Trigger", StringComparison.Ordinal))
-            ? $"トリガーは、パネルの設定の「トリガーを押したとみなす値」({threshold.ToString("0.00", Inv)})まで引くと、押したことにします"
+            ? $"トリガーは、押したとみなす値({(threshold * 100).ToString("0", Inv)}%)まで引くと、押したことにします。値は「パネル」タブの「パッド表示」にある「トリガーを押したとみなす値」で変えられます"
             : "");
     }
 
