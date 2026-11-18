@@ -36,6 +36,7 @@ var th = new Thread(() =>
         Set(app, "Sessions", new SessionStore(dataDir));
         Set(app, "Diagnostics", new DiagStore(dataDir));
         Set(app, "Panels", new PanelManager(() => app.Settings, () => { }));
+        typeof(App).GetField("_store", F)!.SetValue(app, new SettingsStore(dataDir));
         Theme.Apply("dark");
 
         var targets = new List<Target>
@@ -61,6 +62,11 @@ var th = new Thread(() =>
         if (args.Length == 3 && args[0] == "diff")
         {
             exit = Diff(args[1], args[2]);
+            return;
+        }
+        if (args.Length == 2 && args[0] == "main")
+        {
+            MainShots(args[1]);
             return;
         }
         if (args.Length == 2 && args[0] == "shots")
@@ -184,6 +190,65 @@ static void Shots(IEnumerable<Target> targets, string dir)
         }
     }
     Console.WriteLine("shots: " + dir);
+}
+
+// メインの画面(窓は出さず、中身だけを同じ大きさの枠に移す)を、パッドを 1 台つないで 3 秒操作した後の状態で、タブごと・診断のページごと・明暗で撮る
+static void MainShots(string dir)
+{
+    Directory.CreateDirectory(dir);
+    foreach (var theme in new[] { "light", "dark" })
+    {
+        Theme.Apply(theme);
+        var win = new MainWindow();
+        var content = (FrameworkElement)win.Content;
+        win.Content = null;
+        var host = new Border { Child = content, Width = 960, Height = 680 };
+        host.SetResourceReference(Border.BackgroundProperty, "BackgroundBrush");
+        TextElement.SetFontFamily(host, new FontFamily("Yu Gothic UI"));
+        TextElement.SetFontSize(host, 14);
+        host.SetResourceReference(TextElement.ForegroundProperty, "TextBrush");
+        var feed = new Feed();
+        void Frames(int n)
+        {
+            for (int f = 0; f < n; f++)
+            {
+                var (s, now) = feed.Next(spin: f < n - 30);
+                App.Current.Bus.Publish(s);
+                win.Render(s, now);
+                host.Measure(new Size(960, 680));
+                host.Arrange(new Rect(0, 0, 960, 680));
+                host.UpdateLayout();
+            }
+        }
+        void Shot(string name)
+        {
+            var bmp = new RenderTargetBitmap(960, 680, 96, 96, PixelFormats.Pbgra32);
+            bmp.Render(host);
+            var enc = new PngBitmapEncoder();
+            enc.Frames.Add(BitmapFrame.Create(bmp));
+            using var file = File.Create(Path.Combine(dir, $"{theme}_{name}.png"));
+            enc.Save(file);
+        }
+        string[] tabs = ["home", "panels", "diag", "stats", "settings", "measure"];
+        for (int i = 0; i < tabs.Length; i++)
+        {
+            win.SelectTab(i);
+            if (i == 2)
+            {
+                string[] pages = ["buttons", "stick", "trigger", "vibration", "idle", "history"];
+                for (int p = 0; p < pages.Length; p++)
+                {
+                    win.SelectDiag(p);
+                    Frames(60);
+                    Shot($"diag_{pages[p]}");
+                }
+                continue;
+            }
+            Frames(i == 0 ? 180 : 60);
+            Shot(tabs[i]);
+        }
+    }
+    Console.WriteLine("main: " + dir);
 }
 
 // 2 つのフォルダの同じ名前の PNG を画素で比べ、違う画素の数と、色の差の最大(0〜255)を出す。全部同じなら 0 を返す
